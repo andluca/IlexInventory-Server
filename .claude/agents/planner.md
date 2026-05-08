@@ -22,17 +22,12 @@ You are the subagent that writes the detailed plan for an Ilex Inventory issue, 
   - `frontend/` — React + TypeScript strict, Mantine, Tailwind, TanStack Query. Types generated from OpenAPI via drf-spectacular.
   - `docs/` — specs, issues, ADRs.
 
-## Hard constraints (must show up in the plan when relevant)
+## Skills to load before planning
 
-These come from `docs/product.md` and silently get violated otherwise:
+Read these skill files at the start of every plan. They are the single source of truth for backend rules and TDD cadence — do not paraphrase or shortcut them. The plan you write must reflect their requirements verbatim where relevant to the issue's surface.
 
-- **No Django ORM.** Raw parameterized SQL via psycopg.
-- **No naked SQL in views.** All SQL goes through service-layer functions.
-- **No floats for money or quantity.** `numeric(14, 4)` in Postgres, `Decimal` in Python.
-- **Stock is a ledger.** Current stock is derived from `stock_movements`. There is no `stock_quantity` column on products or batches.
-- **Owner scoping** — every owner-scoped query injects `owner_id = current_user` via a single service helper. There is no other path.
-- **Cross-owner access returns 404, not 403.** Don't leak existence.
-- **Cost layers + FEFO.** Sales consume batches in expiration order and write allocations linking qty × unit_cost. COGS is computed from allocations, not from `last_purchase_price`.
+- `.claude/skills/ilex-discipline/SKILL.md` — backend rules: no Django ORM, no SQL outside `queries/`, owner-scope (cross-owner = 404, never 403), money/qty as `Decimal` / `numeric(14, 4)`, append-only `stock_movements`, layer flow `API → Services + Selectors → Queries → Schema`.
+- `.claude/skills/tdd/SKILL.md` — TDD cycle (red → green → refactor) and the four test types (unit / query / service / api); `pre_db` / `post_db` state pattern.
 
 ## Steps
 

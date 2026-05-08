@@ -13,26 +13,21 @@ You are the subagent that implements an Ilex Inventory issue **following the pla
 
 The issue file at the path given in the prompt must already have a `## Plan` section (i.e. `planner` has run). If it doesn't, abort and report — do not invent the plan.
 
+## Skills to load before executing
+
+Read these skill files first. They are the single source of truth for backend rules and TDD cadence — do not paraphrase or shortcut them.
+
+- `.claude/skills/ilex-discipline/SKILL.md` — backend rules: no Django ORM, no SQL outside `queries/`, owner-scope (cross-owner = 404, never 403), money/qty as `Decimal` / `numeric(14, 4)`, append-only `stock_movements`, layer flow `API → Services + Selectors → Queries → Schema`.
+- `.claude/skills/tdd/SKILL.md` — TDD cycle (red → green → refactor), test types (unit / query / service / api), `pre_db` / `post_db` state pattern, real Postgres (no DB mocks).
+
 ## Invariant context
 
 - **Source-of-truth docs** for verification, not for re-planning: `docs/product.md`, the parent spec under `docs/specs/`, `.claude/CLAUDE.md`.
-- **Hard constraints** (from `docs/product.md`):
-  - No Django ORM. Raw psycopg + plain SQL.
-  - No naked SQL in views. All SQL goes through service-layer functions.
-  - No floats for money or quantity. `numeric(14, 4)` in DB, `Decimal` in Python.
-  - Stock is an append-only ledger. No `stock_quantity` columns.
-  - Owner scoping always via the service helper. Cross-owner = 404.
-  - Cost layers + FEFO; COGS computed from allocations.
-
-## Hard rules (do not break)
-
-- **Tests come before implementation. Always.** Red, then Green, then Refactor.
+- **Spec is law.** No spec changes during execution — if the spec is wrong, abort and ask.
 - **No features the spec doesn't require.** Don't add validation, fallbacks, error handling, or abstractions the plan didn't ask for.
-- **No spec changes during execution.** If the spec is wrong, abort and ask.
 - **Argv / request parsing lives at the boundary** (DRF view / serializer). Service functions receive typed Python data.
-- **Real Postgres, not mocks, for SQL-touching tests.** Use a test database fixture.
 - **No `print` debugging left behind, no `Any`, no bare `except`.** Typed exceptions per the surface's `errors.py`.
-- **Don't commit.** `git add` only when the user explicitly asked for a commit. Default behavior: leave the working tree dirty so the user can review and commit themselves.
+- **Don't commit.** `git add` only when the user explicitly asked. Default: leave the tree dirty so the user can review and commit themselves.
 
 ## Steps
 
@@ -52,25 +47,20 @@ When an issue mixes surfaces (e.g. service + view + frontend page), do them in p
 
 ## TDD cycle (per plan item)
 
-1. **Red.** Write the tests as named in the plan. Files:
-   - Unit: `backend/tests/unit/{app}/test_{name}.py` (or co-located `{name}.test.tsx` for frontend).
-   - Integration (DB-touching): `backend/tests/integration/{app}/test_{name}.py` against a real Postgres test database.
-   - API: `backend/tests/api/{app}/test_{name}.py` via DRF test client.
-   - Run them. Confirm fail-for-the-right-reason (assertion mismatch or missing module — not a syntax error).
-2. **Green.** Minimum implementation to pass. Respect layers (View → Service → SQL); owner-scope at the service boundary; typed exceptions.
-3. **Refactor.** Naming, decomposition, magic values to constants, no SQL leaking out of services. Tests stay green.
-4. Next plan item.
+Follow the cycle and test-type guide from the `tdd` skill. Apply per plan item, in plan order. Confirm Red fails for the right reason (assertion mismatch or missing module — not a syntax error) before writing Green.
 
 ## Validation gates (run after every TDD cycle that touches code)
 
-1. **Surface-specific tests** (per dispatch table).
-2. **Full surface regression.** Backend: `pytest backend/` whole suite. Frontend: `npm test` whole suite.
-3. **Typecheck.** `npm run typecheck` for frontend. mypy for backend if configured.
-4. **Lint.** `ruff check backend/` and `npm run lint` for frontend (when configured).
-5. **No ORM** check on touched backend code: `grep -R "from django.db.models\|\.objects\." backend/{app}/` returns nothing.
-6. **No SQL in views** check: `grep -RE "psycopg|cursor\.execute|SELECT |INSERT |UPDATE " backend/{app}/views*` returns nothing — all SQL must be reachable only via `services/`.
-7. **Owner-scope present**: every new SQL path that touches owner-scoped tables routes through the owner-scope helper.
-8. **No floats**: `grep -RE "float\(|: float" backend/{app}/` returns nothing in money/quantity paths.
+Hard invariants and CI gates come from the `ilex-discipline` skill. After every cycle that touches code:
+
+1. **Surface-specific tests** (per the dispatch table above).
+2. **Full surface regression.** Backend: `pytest backend/`. Frontend: `npm test`.
+3. **Typecheck.** mypy for backend if configured. `npm run typecheck` for frontend.
+4. **Lint.** `ruff check backend/`. `npm run lint` for frontend if configured.
+5. **No-ORM gate.** `./scripts/check_no_orm.sh` exits 0 (only `apps/core/auth.py` may import `django.contrib.auth` per BE-D14).
+6. **No-SQL-in-views gate.** `grep -RE "cursor\.execute" backend/apps/*/services.py backend/apps/*/selectors.py backend/apps/*/apis.py` returns nothing.
+7. **Owner-scope gate.** Every owner-scoped query function uses `@scoped` (per the `ilex-discipline` skill).
+8. **No-floats gate.** No `float(` near money/qty paths.
 
 ## Completion
 
