@@ -1,4 +1,5 @@
 .env
+.env.prod
 .claude/settings.local.json
 
 # Python build artifacts

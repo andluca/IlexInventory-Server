@@ -222,6 +222,45 @@ docs/
 
 ---
 
+## Deploy
+
+Production target: **Fly.io** (single-region `iad`, native Postgres add-on, `release_command` runs `migrate_sql` before traffic shifts).
+
+Bootstrap sequence (one-time, operator):
+
+```bash
+# 1. Create the app (no deploy yet)
+fly launch --no-deploy
+
+# 2. Provision managed Postgres and inject DATABASE_URL into secrets
+fly postgres create
+fly postgres attach
+
+# 3. Set remaining required secrets
+fly secrets set \
+  DJANGO_SECRET_KEY="$(openssl rand -hex 32)" \
+  ALLOWED_HOSTS="ilex-inventory-server.fly.dev" \
+  CORS_ALLOWED_ORIGINS="https://your-frontend.vercel.app"
+
+# 4. Deploy (Fly runs migrate_sql as release_command before traffic shifts)
+fly deploy
+```
+
+Health probe: `curl https://ilex-inventory-server.fly.dev/api/v1/health`
+
+Local prod-shape smoke (requires Docker):
+
+```bash
+cp .env.prod.example .env.prod  # fill in real values
+docker compose -f deploy/docker-compose.prod.yml up --build -d
+./scripts/smoke_health.sh
+docker compose -f deploy/docker-compose.prod.yml down -v
+```
+
+See `deploy/fly.toml` for platform config and `.env.prod.example` for the full env-var list.
+
+---
+
 ## Author
 
 André Lucas Loubet Souza · `contact.andreloubet@gmail.com`

@@ -1,0 +1,3 @@
+# Ensure consistent line endings for the OpenAPI snapshot across contributor platforms.
+# This makes the drift gate byte-stable regardless of OS line-ending settings.
+backend/openapi.json text eol=lf
