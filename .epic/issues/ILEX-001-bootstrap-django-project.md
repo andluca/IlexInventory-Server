@@ -3,7 +3,7 @@ id: ILEX-001
 github_id: null
 status: open
 assignee: null
-state: Executing
+state: Done
 type: item
 depends_on: []
 ---
@@ -233,3 +233,5 @@ Each step is independently shippable: after step N, the test suite passes and `p
 
 
 # Journal
+
+- 2026-05-08: Executed all 5 plan steps end-to-end; Django 5.1 + DRF + drf-spectacular bootstrapped with `GET /api/v1/health` (200/503 via raw psycopg) and `GET /api/v1/openapi.json` (OpenAPI 3.1.0); 48/48 tests green, ruff clean, no ORM imports.
