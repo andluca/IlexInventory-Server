@@ -60,11 +60,18 @@ class Unprocessable(DomainError):
     code = "Unprocessable"
 
 
+class Unauthorized(DomainError):
+    """Authentication required or credentials invalid — HTTP 401."""
+
+    code = "Unauthorized"
+
+
 _HTTP_STATUS: dict[type[DomainError], int] = {
     NotFound: 404,
     ValidationError: 400,
     Conflict: 409,
     Unprocessable: 422,
+    Unauthorized: 401,
     DomainError: 500,
 }
 

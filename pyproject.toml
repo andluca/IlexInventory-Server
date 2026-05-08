@@ -23,6 +23,13 @@ dev = [
 # This project is run from source, not packaged. Disable auto-discovery.
 packages = []
 
+[tool.ilex.checks]
+# CI gate: ORM allowlist (BE-D14).
+# Only backend/apps/core/auth.py may import from django.db.models or django.contrib.auth.
+# Run: ./scripts/check_no_orm.sh
+# Or:  pytest backend/apps/core/tests/unit/test_no_orm.py (runs on every pytest invocation)
+no_orm_allowlist = "backend/apps/core/auth.py"
+
 [tool.pytest.ini_options]
 pythonpath = ["backend"]
 testpaths = ["backend"]

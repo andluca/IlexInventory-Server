@@ -5,6 +5,10 @@ instead of going through the services layer.  This is intentional — health
 has no business logic and no owner-scoped data; routing it through a service
 function would add indirection with zero benefit.  All other views MUST use
 the services layer.
+
+Auth views (signup, login, logout, me) delegate to apps.core.auth — the ORM
+allowlist file (BE-D14).  Views catch DomainError and map to HTTP via
+to_response().
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ import psycopg
 from django.conf import settings
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers, status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -89,3 +94,127 @@ class HealthView(APIView):
                 {"status": "degraded", "checks": {"postgres": "down"}},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+
+
+# ---------------------------------------------------------------------------
+# Auth views
+# ---------------------------------------------------------------------------
+
+
+class SignupView(APIView):
+    """Create a new account and log in immediately.
+
+    CSRF-exempt: client cannot have a CSRF token before first login.
+    Achieved by setting authentication_classes=[] which disables DRF's
+    SessionAuthentication CSRF enforcement.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    @extend_schema(
+        request=None,
+        responses={200: None},
+        auth=[],
+        summary="Sign up a new account",
+    )
+    def post(self, request: Request) -> Response:
+        from apps.core.auth import signup_user
+        from apps.core.errors import DomainError, to_response
+        from apps.core.serializers import SignupRequest, UserResponse
+
+        serializer = SignupRequest(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "ValidationError", "fields": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = signup_user(
+                request._request,
+                email=serializer.validated_data["email"],
+                password=serializer.validated_data["password"],
+            )
+        except DomainError as exc:
+            body, http_status = to_response(exc)
+            return Response(body, status=http_status)
+
+        return Response({"user": UserResponse(user).data}, status=status.HTTP_200_OK)
+
+
+class LoginView(APIView):
+    """Authenticate an existing user and set session cookie.
+
+    CSRF-exempt: same reasoning as SignupView.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    @extend_schema(
+        request=None,
+        responses={200: None},
+        auth=[],
+        summary="Log in with email and password",
+    )
+    def post(self, request: Request) -> Response:
+        from apps.core.auth import authenticate_user
+        from apps.core.errors import DomainError, to_response
+        from apps.core.serializers import LoginRequest, UserResponse
+
+        serializer = LoginRequest(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"error": "ValidationError", "fields": serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = authenticate_user(
+                request._request,
+                email=serializer.validated_data["email"],
+                password=serializer.validated_data["password"],
+            )
+        except DomainError as exc:
+            body, http_status = to_response(exc)
+            return Response(body, status=http_status)
+
+        return Response({"user": UserResponse(user).data}, status=status.HTTP_200_OK)
+
+
+class LogoutView(APIView):
+    """Clear the session. Requires an active session (IsAuthenticated).
+
+    CSRF token required (default SessionAuthentication behavior).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        responses={204: None},
+        summary="Log out the current session",
+    )
+    def post(self, request: Request) -> Response:
+        from apps.core.auth import logout_user
+
+        logout_user(request._request)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MeView(APIView):
+    """Return the currently authenticated user.
+
+    Returns 401 when no session is present (IsAuthenticated default).
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        responses={200: None},
+        summary="Return the current authenticated user",
+    )
+    def get(self, request: Request) -> Response:
+        from apps.core.serializers import UserResponse
+
+        return Response({"user": UserResponse(request.user).data}, status=status.HTTP_200_OK)

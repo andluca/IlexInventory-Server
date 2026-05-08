@@ -84,3 +84,20 @@ def test_to_response_omits_none_fields():
     exc = NotFound(detail="gone")
     body, _ = to_response(exc)
     assert "fields" not in body
+
+
+def test_unauthorized_to_response():
+    from apps.core.errors import Unauthorized, to_response
+
+    exc = Unauthorized(detail="Invalid credentials")
+    body, status = to_response(exc)
+    assert status == 401
+    assert body["error"] == "Unauthorized"
+    assert body["detail"] == "Invalid credentials"
+
+
+def test_unauthorized_default_code():
+    from apps.core.errors import Unauthorized
+
+    exc = Unauthorized()
+    assert exc.code == "Unauthorized"

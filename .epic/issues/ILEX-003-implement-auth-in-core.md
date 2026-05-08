@@ -1,9 +1,9 @@
 ---
 id: ILEX-003
 github_id: null
-status: open
+status: completed
 assignee: null
-state: Executing
+state: Done
 type: item
 depends_on: [ILEX-002]
 ---
@@ -352,3 +352,80 @@ Each step is independently shippable: after step N, `pytest` is green, `ruff che
 
 
 # Journal
+
+## Step 1 — 2026-05-08
+
+Wire `DATABASES["default"]`, apply Django auth/sessions migrations, retype `idempotency_keys.owner_id` to `INT` and add FK.
+
+Files changed:
+- `backend/settings/base.py` — parse `DATABASE_URL` via `urllib.parse.urlsplit`; populate `DATABASES["default"]`; add `CSRF_COOKIE_SAMESITE`, `SESSION_COOKIE_SAMESITE`, `LOGIN_URL`, `DEFAULT_PERMISSION_CLASSES`
+- `backend/migrations/0002_auth_fk.sql` — new; TRUNCATE + `ALTER COLUMN owner_id TYPE INT USING NULL` + FK to `auth_user(id)`
+- `backend/apps/core/idempotency.py` — `str(owner_id)` → `int(owner_id)` throughout
+- `backend/apps/core/tests/api/conftest.py` — run `migrate contenttypes/auth/sessions` before `migrate_sql`
+- `backend/apps/core/tests/api/test_auth_fk.py` — new; 3 integration tests for FK contract
+- `backend/apps/core/tests/api/test_idempotency.py` — `_fake_user` now uses `int` ids + inserts `auth_user` row
+- `backend/apps/core/tests/api/test_migrate_sql.py` — `_EXPECTED_MIGRATIONS = 2` (was hardcoded `1`)
+- `backend/apps/core/tests/unit/conftest.py` — run ORM migrations before `migrate_sql`
+- `backend/apps/core/tests/unit/test_uuidv7_sql.py` — `test_idempotency_keys_pk_rejects_duplicate` uses INT owner_id + auth_user fixture row
+
+Gates: 85/85 pytest green; `python manage.py check` 0 issues.
+
+## Step 2 — 2026-05-08
+
+Add `Unauthorized` to `apps/core/errors.py`.
+
+Files changed:
+- `backend/apps/core/errors.py` — added `class Unauthorized(DomainError): code = "Unauthorized"` + `Unauthorized: 401` in `_HTTP_STATUS`
+- `backend/apps/core/tests/unit/test_errors.py` — added `test_unauthorized_to_response` and `test_unauthorized_default_code`
+
+Gates: 87/87 pytest green (11 unit error tests).
+
+## Step 3 — 2026-05-08
+
+`apps/core/auth.py` — the ORM chokepoint (BE-D14).
+
+Files changed:
+- `backend/apps/core/auth.py` — new; `signup_user`, `authenticate_user`, `logout_user`; only file importing from `django.contrib.auth`
+- `backend/apps/core/tests/api/test_auth_unit.py` — new; 7 tests (`signup_user` creates row + hashes pwd + raises Conflict; `authenticate_user` happy path + wrong pwd + unknown email; `logout_user` clears session); marked `django_db`
+
+Gates: 94/94 pytest green.
+
+## Step 4 — 2026-05-08
+
+Serializers + 4 API views + URL routes.
+
+Files changed:
+- `backend/apps/core/serializers.py` — new; `SignupRequest`, `LoginRequest`, `UserResponse`
+- `backend/apps/core/apis.py` — added `SignupView`, `LoginView`, `LogoutView`, `MeView`
+- `backend/apps/core/exceptions.py` — new; custom DRF exception handler mapping `NotAuthenticated` → 401 (DRF default is 403 for session-only auth)
+- `backend/apps/core/urls.py` — registered four auth routes
+- `backend/settings/base.py` — added `EXCEPTION_HANDLER` pointing to `apps.core.exceptions.exception_handler`
+- `backend/apps/core/tests/api/test_auth_api.py` — new; 10 API tests (signup happy/dup/malformed/short; login+me; bad-pwd; unknown-email; me-401; logout+me-401; session isolation)
+
+Gates: 104/104 pytest green; ruff clean; `manage.py check` 0 issues.
+
+## Step 5 — 2026-05-08
+
+CSRF policy verification.
+
+Files changed:
+- `backend/apps/core/tests/api/test_auth_csrf.py` — new; 4 tests: signup/login work without CSRF token; logout without CSRF token → 403; logout with CSRF token → 204
+
+CSRF policy was already correct (no implementation change needed): `authentication_classes=[]` on `SignupView`/`LoginView` skips DRF's CSRF check; `LogoutView` retains `SessionAuthentication` which enforces CSRF for authenticated POSTs.
+
+Gates: 108/108 pytest green.
+
+## Step 6 — 2026-05-08
+
+CI grep gate — ORM allowlist.
+
+Files changed:
+- `scripts/check_no_orm.sh` — new; shell script that greps `backend/apps/` for ORM imports, exits non-zero on any match outside `apps/core/auth.py`
+- `pyproject.toml` — added `[tool.ilex.checks]` section documenting the allowlist
+- `backend/apps/core/tests/unit/test_no_orm.py` — new; 2 tests: `test_no_orm_outside_allowlist` (scans all `.py` files, fails on any import-line match outside `auth.py`); `test_allowlist_file_has_orm_import` (sanity check that allowlist isn't stale)
+- `backend/conftest.py` — added `django_db_setup` no-op fixture so pytest-django does not try to create/drop the test database (our custom `db` fixture owns the lifecycle)
+- `backend/settings/base.py` — added `TEST.NAME` to `DATABASES["default"]` so pytest-django targets `ilex_test` not `test_ilex_test`
+- `backend/apps/core/tests/api/test_auth_unit.py` — removed `from django.contrib.auth import get_user_model` (ORM allowlist violation); verification now uses the returned user object directly + `pytestmark = pytest.mark.django_db`
+- `backend/apps/core/exceptions.py` — new; custom DRF exception handler mapping `NotAuthenticated` → 401
+
+Gates: 110/110 pytest green; ruff clean; `manage.py check` 0 issues; `./scripts/check_no_orm.sh` exits 0.

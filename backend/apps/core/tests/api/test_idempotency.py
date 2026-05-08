@@ -3,33 +3,34 @@
 Uses a tiny stub view to test the decorator in isolation, against the real
 idempotency_keys table in the test DB.
 
-We avoid Django's auth.User ORM (DATABASES is empty until ILEX-003) by
-using a simple namespace object with an `id` field as the request.user —
-the decorator only reads `request.user.id`.
+owner_id is now INT (post-0002_auth_fk.sql) matching auth_user.id.
+The stub inserts a real auth_user row before creating idempotency_keys rows
+so the FK constraint is satisfied.
 
 force_authenticate() is used so DRF's Request wrapper picks up the fake user
-instead of running its own auth pipeline (which would give AnonymousUser
-when authentication_classes=[]).
+instead of running its own auth pipeline.
 
 See SPEC §2.6 for the endpoint idempotency contract.
 """
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import types
-import uuid
 
 import psycopg
 from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+_uid_counter = itertools.count(start=9000)
+
 
 def _db_url() -> str:
     return os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ilex_test")
@@ -41,9 +42,28 @@ def _clean_idempotency_keys() -> None:
         conn.execute("TRUNCATE idempotency_keys")
 
 
-def _fake_user(uid: uuid.UUID | None = None) -> types.SimpleNamespace:
+def _make_auth_user(uid: int) -> None:
+    """Insert a minimal auth_user row so the idempotency FK is satisfied."""
+    email = f"stub_{uid}@test.invalid"
+    with psycopg.connect(_db_url(), autocommit=True) as conn:
+        conn.execute(
+            """
+            INSERT INTO auth_user
+                (id, username, email, password,
+                 is_superuser, is_staff, is_active,
+                 first_name, last_name, date_joined)
+            VALUES (%s, %s, %s, 'unusable!', false, false, true, '', '', NOW())
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (uid, email, email),
+        )
+
+
+def _fake_user(uid: int | None = None) -> types.SimpleNamespace:
     """Minimal stand-in for request.user — the decorator only reads .id."""
-    return types.SimpleNamespace(id=uid or uuid.uuid4())
+    resolved = uid if uid is not None else next(_uid_counter)
+    _make_auth_user(resolved)
+    return types.SimpleNamespace(id=resolved)
 
 
 # Counter for tracking handler invocations.

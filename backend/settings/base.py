@@ -5,6 +5,8 @@ Environment-specific overrides live in dev.py and prod.py.
 
 from __future__ import annotations
 
+import urllib.parse
+
 from settings._env import env
 
 # ---------------------------------------------------------------------------
@@ -17,13 +19,28 @@ SECRET_KEY = env("DJANGO_SECRET_KEY")
 # Database
 # ---------------------------------------------------------------------------
 
-# DATABASES is intentionally empty — all SQL goes through raw psycopg
-# connections opened in service functions (BE-D14).  The auth.User ORM entry
-# will be added here in ILEX-003 when the auth migration lands.
-DATABASES: dict = {}
-
 # Direct psycopg URL available to service functions and the health view.
 DATABASE_URL = env("DATABASE_URL")
+
+# Parse DATABASE_URL for Django's ORM connection (used only for auth.User,
+# django_session, and contenttypes — all other SQL goes through raw psycopg).
+_db = urllib.parse.urlsplit(DATABASE_URL)
+_db_name = _db.path.lstrip("/")
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": _db_name,
+        "USER": _db.username or "",
+        "PASSWORD": _db.password or "",
+        "HOST": _db.hostname or "localhost",
+        "PORT": str(_db.port or 5432),
+        # Tell pytest-django to use the same DB (no test_ prefix).
+        # Our custom conftest already drops/recreates ilex_test for isolation.
+        "TEST": {
+            "NAME": _db_name,
+        },
+    }
+}
 
 # ---------------------------------------------------------------------------
 # Application
@@ -87,14 +104,35 @@ USE_TZ = True
 # DRF
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# CSRF + Session cookie policy
+# ---------------------------------------------------------------------------
+
+CSRF_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_SAMESITE = "Lax"
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+
+LOGIN_URL = "/api/v1/auth/login"
+
+# ---------------------------------------------------------------------------
+# DRF
+# ---------------------------------------------------------------------------
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
     ],
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "EXCEPTION_HANDLER": "apps.core.exceptions.exception_handler",
 }
 
 # ---------------------------------------------------------------------------

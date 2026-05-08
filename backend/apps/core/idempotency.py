@@ -92,7 +92,7 @@ def _lookup_cache(
                       FROM idempotency_keys
                      WHERE owner_id = %s AND key = %s AND endpoint = %s
                     """,
-                    (str(owner_id), key, endpoint),
+                    (int(owner_id), key, endpoint),
                 )
                 row = cur.fetchone()
         if row is None:
@@ -131,7 +131,7 @@ def _store_cache(
                     ON CONFLICT (owner_id, key, endpoint) DO NOTHING
                     """,
                     (
-                        str(owner_id),
+                        int(owner_id),
                         key,
                         endpoint,
                         response.status_code,

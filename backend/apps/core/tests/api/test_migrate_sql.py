@@ -40,14 +40,17 @@ def _count_migrations(db) -> int:
         return cur.fetchone()[0]
 
 
+_EXPECTED_MIGRATIONS = 2  # 0001_init.sql + 0002_auth_fk.sql
+
+
 def test_migrate_sql_applies_and_is_idempotent(db):
-    """First run applies 0001_init.sql; second run is a no-op."""
+    """First run applies all pending SQL migrations; second run is a no-op."""
     import psycopg
 
     db_url = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ilex_test")
 
-    # First run — may output "applied: 0001_init.sql" or "up to date" depending
-    # on whether another conftest already applied the migration in this session.
+    # First run — may output "applied: …" or "up to date" depending on whether
+    # another conftest fixture already applied migrations in this session.
     result = _run_migrate(db_url)
     assert result.returncode == 0, (
         f"migrate_sql failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
@@ -66,7 +69,9 @@ def test_migrate_sql_applies_and_is_idempotent(db):
     finally:
         conn.close()
 
-    assert count_after_first == 1, f"Expected 1 migration row, got {count_after_first}"
+    assert count_after_first == _EXPECTED_MIGRATIONS, (
+        f"Expected {_EXPECTED_MIGRATIONS} migration rows, got {count_after_first}"
+    )
 
     # Second run — must be idempotent
     result2 = _run_migrate(db_url)
@@ -86,6 +91,6 @@ def test_migrate_sql_applies_and_is_idempotent(db):
     finally:
         conn2.close()
 
-    assert count_after_second == 1, (
-        f"Expected row count to stay at 1, got {count_after_second}"
+    assert count_after_second == _EXPECTED_MIGRATIONS, (
+        f"Expected row count to stay at {_EXPECTED_MIGRATIONS}, got {count_after_second}"
     )

@@ -6,6 +6,12 @@ connection, yields it, closes on teardown.
 
 Tests that touch the DB use the `db` fixture; sibling conftest files
 manage their schema setup (see backend/apps/core/tests/conftest.py).
+
+pytest-django integration:
+  When tests use @pytest.mark.django_db, pytest-django needs access to the
+  same ilex_test database that the custom `db` fixture manages.  We override
+  `django_db_setup` with a no-op so pytest-django does NOT create/drop its
+  own test database — our custom `db` fixture owns the lifecycle.
 """
 
 from __future__ import annotations
@@ -44,3 +50,14 @@ def db():
         yield conn
     finally:
         conn.close()
+
+
+@pytest.fixture(scope="session")
+def django_db_setup() -> None:  # type: ignore[override]
+    """No-op: the custom `db` fixture manages database lifecycle.
+
+    pytest-django calls this to create/migrate its test database.
+    We skip that entirely — `db` already drops and recreates ilex_test,
+    and the api/unit conftest fixtures apply Django + SQL migrations via
+    manage.py subprocesses.
+    """
