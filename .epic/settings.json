@@ -1,0 +1,8 @@
+{
+  "baseDirectory": ".epic",
+  "issuesDirectory": "issues",
+  "draftsDirectory": "drafts",
+  "worktreesDirectory": ".worktrees",
+  "projectPrefix": "ilex",
+  "type": "web"
+}
