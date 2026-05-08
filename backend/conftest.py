@@ -61,3 +61,69 @@ def django_db_setup() -> None:  # type: ignore[override]
     and the api/unit conftest fixtures apply Django + SQL migrations via
     manage.py subprocesses.
     """
+
+
+# Tables that survive between tests. Everything else gets TRUNCATEd before
+# each test that uses the `db` fixture. Order matters only for clarity —
+# CASCADE handles FK chains regardless.
+_PRESERVED_TABLES = frozenset({
+    "_sql_migrations",
+    "django_migrations",
+    "django_content_type",
+    "auth_permission",
+    "auth_group",
+    "auth_group_permissions",
+    "auth_user_groups",
+    "auth_user_user_permissions",
+    "django_session",
+    "django_admin_log",
+})
+
+
+@pytest.fixture(autouse=True)
+def _wipe_data_tables_between_tests(request):
+    """Reset data tables before every DB-touching test.
+
+    Opens a fresh autocommit psycopg connection (independent of the shared
+    session `db` fixture, which may be in a [BAD] state from a previous test).
+    Runs one TRUNCATE … RESTART IDENTITY CASCADE on every public-schema table
+    except migration trackers and Django auth metadata.
+
+    Skipped for tests that don't request `db` (pure unit tests).
+    """
+    if "db" not in request.fixturenames:
+        yield
+        return
+
+    test_url = os.environ.get("DATABASE_URL", DEFAULT_DB_URL)
+    try:
+        with psycopg.connect(test_url, autocommit=True) as wipe_conn:
+            with wipe_conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT tablename
+                      FROM pg_tables
+                     WHERE schemaname = 'public'
+                       AND tablename NOT LIKE 'pg_%'
+                    """
+                )
+                all_tables = [row[0] for row in cur.fetchall()]
+                targets = [t for t in all_tables if t not in _PRESERVED_TABLES]
+                if targets:
+                    quoted = ", ".join(f'"{t}"' for t in targets)
+                    cur.execute(f"TRUNCATE {quoted} RESTART IDENTITY CASCADE")
+    except psycopg.Error:
+        # First few tests may run before the schema is ready (per-app session
+        # autouse fixtures haven't applied migrate_sql yet). Let the test
+        # itself fail if it depends on those tables.
+        pass
+
+    # If the shared `db` fixture is in an aborted-tx state from a prior test,
+    # roll it back so this test starts with a clean session connection.
+    db = request.getfixturevalue("db")
+    try:
+        db.rollback()
+    except psycopg.Error:
+        pass
+
+    yield
