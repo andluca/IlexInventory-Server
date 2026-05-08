@@ -5,6 +5,7 @@ Behavioral: assert DB state after deletion. No mocking.
 
 from __future__ import annotations
 
+import os
 import uuid
 from decimal import Decimal
 
@@ -20,10 +21,9 @@ from apps.procurement.services import (
     delete_purchase_order_draft,
 )
 
-pytestmark = pytest.mark.django_db
-
-import os
 _DB_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ilex_test")
+
+pytestmark = pytest.mark.django_db
 
 
 def _seed_user(uid: int) -> None:

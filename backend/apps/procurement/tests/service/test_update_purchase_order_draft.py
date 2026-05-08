@@ -8,6 +8,8 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 
+import os
+
 import psycopg
 import pytest
 
@@ -19,14 +21,12 @@ from apps.procurement.errors import (
 )
 from apps.procurement.services import (
     create_purchase_order_draft,
-    receive_purchase_order,
     update_purchase_order_draft,
 )
 
-pytestmark = pytest.mark.django_db
-
-import os
 _DB_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ilex_test")
+
+pytestmark = pytest.mark.django_db
 
 
 def _seed_user(uid: int) -> None:

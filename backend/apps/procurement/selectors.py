@@ -7,7 +7,6 @@ queries layer to build the response shapes needed by the API layer.
 
 from __future__ import annotations
 
-from uuid import UUID
 
 import psycopg
 from django.conf import settings

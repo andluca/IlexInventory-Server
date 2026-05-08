@@ -66,11 +66,13 @@ class HealthView(APIView):
     permission_classes = []
 
     @extend_schema(
+        tags=["meta"],
         responses={
             200: _HealthOkSerializer,
             503: _HealthDegradedSerializer,
         },
         auth=[],
+        summary="Liveness probe with Postgres reachability check",
     )
     def get(self, request: Request) -> Response:
         try:
@@ -117,6 +119,7 @@ class SignupView(APIView):
     permission_classes = []
 
     @extend_schema(
+        tags=["auth"],
         request=None,
         responses={200: None},
         auth=[],
@@ -153,6 +156,7 @@ class LoginView(APIView):
     permission_classes = []
 
     @extend_schema(
+        tags=["auth"],
         request=None,
         responses={200: None},
         auth=[],
@@ -188,6 +192,7 @@ class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
+        tags=["auth"],
         responses={204: None},
         summary="Log out the current session",
     )
@@ -205,6 +210,7 @@ class MeView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
+        tags=["auth"],
         responses={200: None},
         summary="Return the current authenticated user",
     )

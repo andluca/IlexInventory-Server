@@ -49,6 +49,7 @@ class PurchaseOrderListApi(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
+        tags=["procurement"],
         parameters=[
             OpenApiParameter("status", str, required=False, description="Filter by status: draft or received"),
             OpenApiParameter("search", str, required=False, description="ILIKE on supplier_name"),
@@ -89,6 +90,7 @@ class PurchaseOrderListApi(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @extend_schema(
+        tags=["procurement"],
         request=PurchaseOrderCreateRequest,
         responses={200: PurchaseOrderResponse, 400: None, 404: None},
         summary="Create a draft purchase order",
@@ -121,6 +123,7 @@ class PurchaseOrderDetailApi(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
+        tags=["procurement"],
         responses={200: PurchaseOrderResponse, 404: None},
         summary="Get a purchase order by ID",
     )
@@ -133,6 +136,7 @@ class PurchaseOrderDetailApi(APIView):
         return Response(PurchaseOrderResponse(po).data, status=status.HTTP_200_OK)
 
     @extend_schema(
+        tags=["procurement"],
         request=PurchaseOrderUpdateRequest,
         responses={200: PurchaseOrderResponse, 400: None, 404: None, 409: None},
         summary="Update a draft purchase order",
@@ -160,6 +164,7 @@ class PurchaseOrderDetailApi(APIView):
         return Response(PurchaseOrderResponse(po).data, status=status.HTTP_200_OK)
 
     @extend_schema(
+        tags=["procurement"],
         responses={204: None, 404: None, 409: None},
         summary="Delete a draft purchase order",
     )
@@ -182,6 +187,7 @@ class PurchaseOrderReceiveApi(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
+        tags=["procurement"],
         request=PurchaseOrderReceiveRequest,
         responses={200: PurchaseOrderResponse, 400: None, 404: None, 409: None},
         summary="Receive a purchase order (requires Idempotency-Key header)",

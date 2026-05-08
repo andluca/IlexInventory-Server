@@ -50,6 +50,7 @@ class ProductListApi(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
+        tags=["catalog"],
         parameters=[
             OpenApiParameter("search", str, required=False, description="ILIKE on name/sku"),
             OpenApiParameter("archived", bool, required=False, description="true=archived only, false=active only"),
@@ -87,6 +88,7 @@ class ProductListApi(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @extend_schema(
+        tags=["catalog"],
         request=ProductCreateRequest,
         responses={200: ProductResponse},
         summary="Create a product",
@@ -119,7 +121,7 @@ class ProductDetailApi(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    @extend_schema(responses={200: ProductResponse, 404: None}, summary="Get product by ID")
+    @extend_schema(tags=["catalog"], responses={200: ProductResponse, 404: None}, summary="Get product by ID")
     def get(self, request: Request, product_id: str) -> Response:
         product = product_by_id(owner_id=request.user.id, product_id=str(product_id))
         if product is None:
@@ -129,6 +131,7 @@ class ProductDetailApi(APIView):
         return Response(ProductResponse(product).data, status=status.HTTP_200_OK)
 
     @extend_schema(
+        tags=["catalog"],
         request=ProductUpdateRequest,
         responses={200: ProductResponse, 400: None, 404: None},
         summary="Update product",
@@ -154,7 +157,7 @@ class ProductDetailApi(APIView):
 
         return Response(ProductResponse(product).data, status=status.HTTP_200_OK)
 
-    @extend_schema(responses={204: None, 404: None, 409: None}, summary="Delete product")
+    @extend_schema(tags=["catalog"], responses={204: None, 404: None, 409: None}, summary="Delete product")
     def delete(self, request: Request, product_id: str) -> Response:
         try:
             delete_product(
@@ -174,6 +177,7 @@ class ProductArchiveApi(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(
+        tags=["catalog"],
         responses={200: ProductResponse, 404: None, 409: None},
         summary="Archive product",
     )
@@ -197,6 +201,7 @@ class ProductImportApi(APIView):
     parser_classes = [MultiPartParser]
 
     @extend_schema(
+        tags=["catalog"],
         request=None,
         responses={200: ProductImportResponse, 400: None},
         summary="Bulk-import products from CSV (multipart/form-data)",

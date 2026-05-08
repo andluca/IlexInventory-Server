@@ -9,7 +9,7 @@ import uuid
 
 import psycopg
 import pytest
-from rest_framework.test import APIClient, force_authenticate
+from rest_framework.test import APIClient
 
 pytestmark = pytest.mark.django_db
 
@@ -100,7 +100,7 @@ def test_list_status_filter():
     idem_key = f"idem-list-filter-{uuid.uuid4().hex}"
 
     po1 = _create_po(client, p1, "Draft Supplier 1")
-    po2 = _create_po(client, p2, "Draft Supplier 2")
+    _po2 = _create_po(client, p2, "Draft Supplier 2")
 
     # Receive one of them
     line_id = po1["lines"][0]["id"]

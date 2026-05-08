@@ -1,0 +1,3365 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Ilex Inventory API",
+        "version": "0.1.0",
+        "description": "Ilex Inventory Server — F&B CPG inventory management."
+    },
+    "paths": {
+        "/api/v1/auth/login": {
+            "post": {
+                "operationId": "auth_login_create",
+                "description": "Authenticate an existing user and set session cookie.\n\nCSRF-exempt: same reasoning as SignupView.",
+                "summary": "Log in with email and password",
+                "tags": [
+                    "auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/logout": {
+            "post": {
+                "operationId": "auth_logout_create",
+                "description": "Clear the session. Requires an active session (IsAuthenticated).\n\nCSRF token required (default SessionAuthentication behavior).",
+                "summary": "Log out the current session",
+                "tags": [
+                    "auth"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/me": {
+            "get": {
+                "operationId": "auth_me_retrieve",
+                "description": "Return the currently authenticated user.\n\nReturns 401 when no session is present (IsAuthenticated default).",
+                "summary": "Return the current authenticated user",
+                "tags": [
+                    "auth"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/signup": {
+            "post": {
+                "operationId": "auth_signup_create",
+                "description": "Create a new account and log in immediately.\n\nCSRF-exempt: client cannot have a CSRF token before first login.\nAchieved by setting authentication_classes=[] which disables DRF's\nSessionAuthentication CSRF enforcement.",
+                "summary": "Sign up a new account",
+                "tags": [
+                    "auth"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/v1/batches": {
+            "get": {
+                "operationId": "batches_retrieve",
+                "description": "GET /batches — list batches for the authenticated owner.",
+                "summary": "List batches",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "expiring_within",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Batches expiring within N days"
+                    },
+                    {
+                        "in": "query",
+                        "name": "is_recalled",
+                        "schema": {
+                            "type": "boolean"
+                        },
+                        "description": "Filter recalled only"
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Page size (default 50)"
+                    },
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Page offset (default 0)"
+                    },
+                    {
+                        "in": "query",
+                        "name": "product_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Filter by product UUID"
+                    }
+                ],
+                "tags": [
+                    "inventory"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BatchListResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "batches_create",
+                "description": "POST /batches — create a manual batch (idempotency-keyed).",
+                "summary": "Create a manual batch",
+                "tags": [
+                    "inventory"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/BatchCreateRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/BatchCreateRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/BatchCreateRequestRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BatchResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/batches/{batch_id}": {
+            "get": {
+                "operationId": "batches_retrieve_2",
+                "description": "GET /batches/{id} — return batch with on_hand + recall state.",
+                "summary": "Get batch by ID",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "batch_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "inventory"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BatchResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "batches_partial_update",
+                "description": "PATCH /batches/{id} — update batch_code and/or expiration_date.",
+                "summary": "Update batch metadata",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "batch_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "inventory"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedBatchPatchMetadataRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedBatchPatchMetadataRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedBatchPatchMetadataRequestRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BatchResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/batches/{batch_id}/movements": {
+            "post": {
+                "operationId": "batches_movements_create",
+                "description": "POST /batches/{id}/movements — record a movement (adjustment or write_off).",
+                "summary": "Record a stock movement",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "batch_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "inventory"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MovementCreateRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MovementCreateRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MovementCreateRequestRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MovementResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/batches/{batch_id}/recall": {
+            "post": {
+                "operationId": "batches_recall_create",
+                "description": "POST /batches/{id}/recall.",
+                "summary": "Recall a batch",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "batch_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "inventory"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RecallRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RecallRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RecallRequestRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BatchResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/batches/{batch_id}/recall-report": {
+            "get": {
+                "operationId": "batches_recall_report_retrieve",
+                "description": "GET /batches/{id}/recall-report — recall report for a batch (JSON or CSV).",
+                "summary": "Recall report for a batch (JSON or CSV export)",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "batch_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "format",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "csv"
+                            ]
+                        },
+                        "description": "Set to 'csv' to receive a streaming CSV export instead of the default JSON response. The response Content-Type will be text/csv; charset=utf-8 with a Content-Disposition header."
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Page size (default 50)"
+                    },
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Page offset (default 0)"
+                    }
+                ],
+                "tags": [
+                    "inventory"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RecallReportResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/batches/{batch_id}/un-recall": {
+            "post": {
+                "operationId": "batches_un_recall_create",
+                "description": "POST /batches/{id}/un-recall.",
+                "summary": "Un-recall a batch",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "batch_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "inventory"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/BatchResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/financials/dashboard": {
+            "get": {
+                "operationId": "financials_dashboard_retrieve",
+                "description": "GET /financials/dashboard — aggregated dashboard or CSV of top_products.",
+                "summary": "Financial dashboard totals (JSON or CSV export)",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "format",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "csv"
+                            ]
+                        },
+                        "description": "Set to 'csv' to receive a streaming CSV export instead of the default JSON response. The response Content-Type will be text/csv; charset=utf-8 with a Content-Disposition header."
+                    },
+                    {
+                        "in": "query",
+                        "name": "from",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Date range start (YYYY-MM-DD)"
+                    },
+                    {
+                        "in": "query",
+                        "name": "to",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Date range end (YYYY-MM-DD)"
+                    },
+                    {
+                        "in": "query",
+                        "name": "top",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Top-N products (default 5, max 50)"
+                    }
+                ],
+                "tags": [
+                    "financials"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DashboardResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/financials/margin": {
+            "get": {
+                "operationId": "financials_margin_retrieve",
+                "description": "GET /financials/margin — paginated per-product margin rows or CSV export.",
+                "summary": "Per-product margin list (JSON or CSV export)",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "cursor",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Opaque cursor for next page"
+                    },
+                    {
+                        "in": "query",
+                        "name": "format",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "csv"
+                            ]
+                        },
+                        "description": "Set to 'csv' to receive a streaming CSV export instead of the default JSON response. The response Content-Type will be text/csv; charset=utf-8 with a Content-Disposition header."
+                    },
+                    {
+                        "in": "query",
+                        "name": "from",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Date range start (YYYY-MM-DD)"
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Page size (default 50, max 100)"
+                    },
+                    {
+                        "in": "query",
+                        "name": "to",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Date range end (YYYY-MM-DD)"
+                    }
+                ],
+                "tags": [
+                    "financials"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MarginListResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/health": {
+            "get": {
+                "operationId": "health_retrieve",
+                "description": "Liveness probe with Postgres reachability check.\n\nAnonymous — no auth, no CSRF (GET only).",
+                "summary": "Liveness probe with Postgres reachability check",
+                "tags": [
+                    "meta"
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HealthOk"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "503": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HealthDegraded"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/movements": {
+            "get": {
+                "operationId": "movements_retrieve",
+                "description": "GET /movements — paginated audit log or CSV streaming export.",
+                "summary": "List stock movements (JSON or CSV export)",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "batch_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Filter by batch UUID"
+                    },
+                    {
+                        "in": "query",
+                        "name": "cursor",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Opaque cursor for next page"
+                    },
+                    {
+                        "in": "query",
+                        "name": "format",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "csv"
+                            ]
+                        },
+                        "description": "Set to 'csv' to receive a streaming CSV export instead of the default JSON response. The response Content-Type will be text/csv; charset=utf-8 with a Content-Disposition header."
+                    },
+                    {
+                        "in": "query",
+                        "name": "from",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "created_at >= date"
+                    },
+                    {
+                        "in": "query",
+                        "name": "kind",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Exact kind filter"
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Page size (default 50)"
+                    },
+                    {
+                        "in": "query",
+                        "name": "product_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Filter by product UUID (via batch join)"
+                    },
+                    {
+                        "in": "query",
+                        "name": "to",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "created_at <= date"
+                    }
+                ],
+                "tags": [
+                    "inventory"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MovementListResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/products": {
+            "get": {
+                "operationId": "products_retrieve",
+                "description": "GET /products — list + search + filter.\nPOST /products — create a new product.",
+                "summary": "List products",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "archived",
+                        "schema": {
+                            "type": "boolean"
+                        },
+                        "description": "true=archived only, false=active only"
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Page size (default 50)"
+                    },
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Page offset (default 0)"
+                    },
+                    {
+                        "in": "query",
+                        "name": "search",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "ILIKE on name/sku"
+                    }
+                ],
+                "tags": [
+                    "catalog"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProductListResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "products_create",
+                "description": "GET /products — list + search + filter.\nPOST /products — create a new product.",
+                "summary": "Create a product",
+                "tags": [
+                    "catalog"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProductCreateRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProductCreateRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ProductCreateRequestRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProductResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/products/{product_id}": {
+            "get": {
+                "operationId": "products_retrieve_2",
+                "description": "GET/PATCH/DELETE /products/{product_id}.",
+                "summary": "Get product by ID",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "product_id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "catalog"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProductResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "products_partial_update",
+                "description": "GET/PATCH/DELETE /products/{product_id}.",
+                "summary": "Update product",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "product_id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "catalog"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedProductUpdateRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedProductUpdateRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedProductUpdateRequestRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProductResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "products_destroy",
+                "description": "GET/PATCH/DELETE /products/{product_id}.",
+                "summary": "Delete product",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "product_id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "catalog"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    },
+                    "409": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/v1/products/{product_id}/archive": {
+            "post": {
+                "operationId": "products_archive_create",
+                "description": "POST /products/{product_id}/archive — soft-delete.",
+                "summary": "Archive product",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "product_id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "catalog"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProductResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    },
+                    "409": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/v1/products/import": {
+            "post": {
+                "operationId": "products_import_create",
+                "description": "POST /products/import — multipart CSV upload with idempotency.",
+                "summary": "Bulk-import products from CSV (multipart/form-data)",
+                "tags": [
+                    "catalog"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ProductImportResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/v1/purchase-orders": {
+            "get": {
+                "operationId": "purchase_orders_retrieve",
+                "description": "GET /purchase-orders — list with filters + pagination.\nPOST /purchase-orders — create a draft PO.",
+                "summary": "List purchase orders",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "from",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "created_at >= date (ISO)"
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Page size (default 50)"
+                    },
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Page offset (default 0)"
+                    },
+                    {
+                        "in": "query",
+                        "name": "search",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "ILIKE on supplier_name"
+                    },
+                    {
+                        "in": "query",
+                        "name": "status",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Filter by status: draft or received"
+                    },
+                    {
+                        "in": "query",
+                        "name": "to",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "created_at <= date (ISO)"
+                    }
+                ],
+                "tags": [
+                    "procurement"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PurchaseOrderListResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "purchase_orders_create",
+                "description": "GET /purchase-orders — list with filters + pagination.\nPOST /purchase-orders — create a draft PO.",
+                "summary": "Create a draft purchase order",
+                "tags": [
+                    "procurement"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PurchaseOrderCreateRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PurchaseOrderCreateRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PurchaseOrderCreateRequestRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PurchaseOrderResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/v1/purchase-orders/{po_id}": {
+            "get": {
+                "operationId": "purchase_orders_retrieve_2",
+                "description": "GET / PATCH / DELETE /purchase-orders/{po_id}.",
+                "summary": "Get a purchase order by ID",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "po_id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "procurement"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PurchaseOrderResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "purchase_orders_partial_update",
+                "description": "GET / PATCH / DELETE /purchase-orders/{po_id}.",
+                "summary": "Update a draft purchase order",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "po_id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "procurement"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedPurchaseOrderUpdateRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedPurchaseOrderUpdateRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedPurchaseOrderUpdateRequestRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PurchaseOrderResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    },
+                    "409": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "purchase_orders_destroy",
+                "description": "GET / PATCH / DELETE /purchase-orders/{po_id}.",
+                "summary": "Delete a draft purchase order",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "po_id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "procurement"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    },
+                    "409": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/v1/purchase-orders/{po_id}/receive": {
+            "post": {
+                "operationId": "purchase_orders_receive_create",
+                "description": "POST /purchase-orders/{po_id}/receive — receive a draft PO.",
+                "summary": "Receive a purchase order (requires Idempotency-Key header)",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "po_id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "procurement"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PurchaseOrderReceiveRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PurchaseOrderReceiveRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PurchaseOrderReceiveRequestRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PurchaseOrderResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "No response body"
+                    },
+                    "404": {
+                        "description": "No response body"
+                    },
+                    "409": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/v1/sales-orders": {
+            "get": {
+                "operationId": "sales_orders_retrieve",
+                "description": "GET /sales-orders — list sales orders for the authenticated owner.",
+                "summary": "List sales orders",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "cursor",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Opaque cursor for next page"
+                    },
+                    {
+                        "in": "query",
+                        "name": "from",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "created_at >= date"
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "description": "Page size (default 50)"
+                    },
+                    {
+                        "in": "query",
+                        "name": "search",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "ILIKE on customer_name"
+                    },
+                    {
+                        "in": "query",
+                        "name": "status",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Filter by status (draft|committed)"
+                    },
+                    {
+                        "in": "query",
+                        "name": "to",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "created_at <= date"
+                    },
+                    {
+                        "in": "query",
+                        "name": "voided",
+                        "schema": {
+                            "type": "boolean"
+                        },
+                        "description": "Filter voided state"
+                    }
+                ],
+                "tags": [
+                    "sales"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SalesOrderListResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "sales_orders_create",
+                "description": "POST /sales-orders — create a draft sales order.",
+                "summary": "Create a draft sales order",
+                "tags": [
+                    "sales"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SalesOrderCreateRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SalesOrderCreateRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SalesOrderCreateRequestRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SalesOrderResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/sales-orders/{so_id}": {
+            "get": {
+                "operationId": "sales_orders_retrieve_2",
+                "description": "GET /sales-orders/{id} — return SO with lines + allocations.",
+                "summary": "Get sales order by ID",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "so_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "sales"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SalesOrderResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "sales_orders_partial_update",
+                "description": "PATCH /sales-orders/{id} — update a draft SO.",
+                "summary": "Update a draft sales order",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "so_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "sales"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedSalesOrderUpdateRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedSalesOrderUpdateRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedSalesOrderUpdateRequestRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SalesOrderResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "sales_orders_destroy",
+                "description": "DELETE /sales-orders/{id} — hard-delete a draft SO.",
+                "summary": "Delete a draft sales order",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "so_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "sales"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/v1/sales-orders/{so_id}/commit": {
+            "post": {
+                "operationId": "sales_orders_commit_create",
+                "description": "POST /sales-orders/{id}/commit — commit a draft SO.",
+                "summary": "Commit a draft sales order",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "so_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "sales"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SalesOrderCommitRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SalesOrderCommitRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SalesOrderCommitRequestRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SalesOrderResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/sales-orders/{so_id}/preview": {
+            "post": {
+                "operationId": "sales_orders_preview_create",
+                "description": "POST /sales-orders/{id}/preview — return proposed FEFO allocations.",
+                "summary": "Preview FEFO allocations for a sales order",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "so_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "sales"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SalesOrderPreviewResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/sales-orders/{so_id}/void": {
+            "post": {
+                "operationId": "sales_orders_void_create",
+                "description": "POST /sales-orders/{id}/void — void a committed SO.",
+                "summary": "Void a committed sales order",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "so_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "sales"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SalesOrderResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "AllocationResponse": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "sales_order_line_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "batch_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "allocated_quantity": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "unit_cost": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "allocated_quantity",
+                    "batch_id",
+                    "created_at",
+                    "id",
+                    "sales_order_line_id",
+                    "unit_cost"
+                ]
+            },
+            "BatchCreateRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "product_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "batch_code": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                    },
+                    "expiration_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date"
+                    },
+                    "unit_cost": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0.0,
+                        "exclusiveMaximum": 10000000000
+                    },
+                    "initial_quantity": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0.0001,
+                        "exclusiveMaximum": 10000000000
+                    }
+                },
+                "required": [
+                    "batch_code",
+                    "initial_quantity",
+                    "product_id",
+                    "unit_cost"
+                ]
+            },
+            "BatchListResponse": {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/BatchResponse"
+                        },
+                        "readOnly": true
+                    },
+                    "total": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "items",
+                    "limit",
+                    "offset",
+                    "total"
+                ]
+            },
+            "BatchResponse": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "owner_id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "product_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "purchase_order_line_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "batch_code": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "expiration_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date",
+                        "readOnly": true
+                    },
+                    "unit_cost": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "on_hand": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "is_recalled": {
+                        "type": "boolean",
+                        "readOnly": true
+                    },
+                    "recall_reason": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    },
+                    "recalled_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "archived_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "archived_at",
+                    "batch_code",
+                    "created_at",
+                    "expiration_date",
+                    "id",
+                    "is_recalled",
+                    "on_hand",
+                    "owner_id",
+                    "product_id",
+                    "purchase_order_line_id",
+                    "recall_reason",
+                    "recalled_at",
+                    "unit_cost",
+                    "updated_at"
+                ]
+            },
+            "DashboardResponse": {
+                "type": "object",
+                "properties": {
+                    "date_from": {
+                        "type": "string",
+                        "format": "date",
+                        "readOnly": true
+                    },
+                    "date_to": {
+                        "type": "string",
+                        "format": "date",
+                        "readOnly": true
+                    },
+                    "totals": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/DashboardTotalsResponse"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "top_products": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/MarginRowResponse"
+                        },
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "date_from",
+                    "date_to",
+                    "top_products",
+                    "totals"
+                ]
+            },
+            "DashboardTotalsResponse": {
+                "type": "object",
+                "properties": {
+                    "revenue": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "cogs": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "profit": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "margin_pct": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "cogs",
+                    "margin_pct",
+                    "profit",
+                    "revenue"
+                ]
+            },
+            "ExplicitAllocationRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "line_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "batch_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "quantity": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0.0001,
+                        "exclusiveMaximum": 10000000000
+                    }
+                },
+                "required": [
+                    "batch_id",
+                    "line_id",
+                    "quantity"
+                ]
+            },
+            "FailedRowResponse": {
+                "type": "object",
+                "properties": {
+                    "row_index": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "error": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "detail": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    },
+                    "fields": {
+                        "type": [
+                            "object",
+                            "null"
+                        ],
+                        "additionalProperties": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "detail",
+                    "error",
+                    "fields",
+                    "row_index"
+                ]
+            },
+            "HealthChecks": {
+                "type": "object",
+                "properties": {
+                    "postgres": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "postgres"
+                ]
+            },
+            "HealthDegraded": {
+                "type": "object",
+                "properties": {
+                    "checks": {
+                        "$ref": "#/components/schemas/HealthChecks"
+                    },
+                    "status": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "checks",
+                    "status"
+                ]
+            },
+            "HealthOk": {
+                "type": "object",
+                "properties": {
+                    "checks": {
+                        "$ref": "#/components/schemas/HealthChecks"
+                    },
+                    "status": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "checks",
+                    "status"
+                ]
+            },
+            "LineCreateRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "product_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "quantity": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0.0001,
+                        "exclusiveMaximum": 10000000000
+                    },
+                    "unit_cost": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0.0,
+                        "exclusiveMaximum": 10000000000
+                    }
+                },
+                "required": [
+                    "product_id",
+                    "quantity",
+                    "unit_cost"
+                ]
+            },
+            "MarginListResponse": {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/MarginRowResponse"
+                        },
+                        "readOnly": true
+                    },
+                    "next_cursor": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "items",
+                    "next_cursor"
+                ]
+            },
+            "MarginRowResponse": {
+                "type": "object",
+                "properties": {
+                    "product_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "product_name": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "units_sold": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "revenue": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "cogs": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "profit": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "margin_pct": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "cogs",
+                    "margin_pct",
+                    "product_id",
+                    "product_name",
+                    "profit",
+                    "revenue",
+                    "units_sold"
+                ]
+            },
+            "MovementCreateRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "$ref": "#/components/schemas/MovementKind"
+                    },
+                    "signed_quantity": {
+                        "type": "number",
+                        "format": "double",
+                        "exclusiveMaximum": 10000000000,
+                        "exclusiveMinimum": -10000000000
+                    },
+                    "notes": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "kind",
+                    "signed_quantity"
+                ]
+            },
+            "MovementKind": {
+                "enum": [
+                    "adjustment",
+                    "write_off"
+                ],
+                "type": "string",
+                "description": "* `adjustment` - adjustment\n* `write_off` - write_off"
+            },
+            "MovementListResponse": {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/MovementResponse"
+                        },
+                        "readOnly": true
+                    },
+                    "next_cursor": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "items",
+                    "next_cursor"
+                ]
+            },
+            "MovementResponse": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "owner_id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "batch_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "kind": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "signed_quantity": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "notes": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    },
+                    "reference_type": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    },
+                    "reference_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "batch_id",
+                    "created_at",
+                    "id",
+                    "kind",
+                    "notes",
+                    "owner_id",
+                    "reference_id",
+                    "reference_type",
+                    "signed_quantity"
+                ]
+            },
+            "PatchedBatchPatchMetadataRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "batch_code": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                    },
+                    "expiration_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date"
+                    },
+                    "clear_expiration": {
+                        "type": "boolean",
+                        "default": false
+                    }
+                }
+            },
+            "PatchedProductUpdateRequestRequest": {
+                "type": "object",
+                "description": "PATCH /products/{id} — only name and description are patchable.\n\nAny other key (including `sku`) is rejected: DRF strict-mode via\nvalidate() to keep the serializer layer clean of SKU-lock business logic.",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": "string"
+                    }
+                }
+            },
+            "PatchedPurchaseOrderUpdateRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "supplier_name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                    },
+                    "supplier_contact": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 500
+                    },
+                    "lines": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/LineCreateRequestRequest"
+                        },
+                        "minItems": 1
+                    }
+                }
+            },
+            "PatchedSalesOrderUpdateRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "customer_name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                    },
+                    "customer_contact": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "lines": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SalesOrderLineRequestRequest"
+                        }
+                    }
+                }
+            },
+            "ProductBaseUnit": {
+                "enum": [
+                    "g",
+                    "ml",
+                    "unit"
+                ],
+                "type": "string",
+                "description": "* `g` - g\n* `ml` - ml\n* `unit` - unit"
+            },
+            "ProductCreateRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "sku": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                    },
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                    },
+                    "description": {
+                        "type": "string",
+                        "default": ""
+                    },
+                    "base_unit": {
+                        "$ref": "#/components/schemas/ProductBaseUnit"
+                    }
+                },
+                "required": [
+                    "base_unit",
+                    "name",
+                    "sku"
+                ]
+            },
+            "ProductImportResponse": {
+                "type": "object",
+                "properties": {
+                    "imported": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "failed": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/FailedRowResponse"
+                        },
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "failed",
+                    "imported"
+                ]
+            },
+            "ProductListResponse": {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ProductResponse"
+                        },
+                        "readOnly": true
+                    },
+                    "total": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "items",
+                    "limit",
+                    "offset",
+                    "total"
+                ]
+            },
+            "ProductResponse": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "sku": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "name": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "description": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "base_unit": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "archived_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "archived_at",
+                    "base_unit",
+                    "created_at",
+                    "description",
+                    "id",
+                    "name",
+                    "sku",
+                    "updated_at"
+                ]
+            },
+            "ProposedAllocationResponse": {
+                "type": "object",
+                "properties": {
+                    "line_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "batch_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "batch_code": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "quantity": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "unit_cost": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "expiration_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "batch_code",
+                    "batch_id",
+                    "expiration_date",
+                    "line_id",
+                    "quantity",
+                    "unit_cost"
+                ]
+            },
+            "PurchaseOrderCreateRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "supplier_name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 500
+                    },
+                    "supplier_contact": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "maxLength": 500
+                    },
+                    "lines": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/LineCreateRequestRequest"
+                        },
+                        "minItems": 1
+                    }
+                },
+                "required": [
+                    "lines",
+                    "supplier_name"
+                ]
+            },
+            "PurchaseOrderLineResponse": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "purchase_order_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "product_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "quantity": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "unit_cost": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "created_at",
+                    "id",
+                    "product_id",
+                    "purchase_order_id",
+                    "quantity",
+                    "unit_cost"
+                ]
+            },
+            "PurchaseOrderListResponse": {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PurchaseOrderResponse"
+                        },
+                        "readOnly": true
+                    },
+                    "total": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "items",
+                    "limit",
+                    "offset",
+                    "total"
+                ]
+            },
+            "PurchaseOrderReceiveRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "lines": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ReceiveLineRequestRequest"
+                        },
+                        "minItems": 1
+                    }
+                },
+                "required": [
+                    "lines"
+                ]
+            },
+            "PurchaseOrderResponse": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "supplier_name": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "supplier_contact": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    },
+                    "status": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "received_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "lines": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/PurchaseOrderLineResponse"
+                        },
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "created_at",
+                    "id",
+                    "lines",
+                    "received_at",
+                    "status",
+                    "supplier_contact",
+                    "supplier_name",
+                    "updated_at"
+                ]
+            },
+            "RecallReportItemResponse": {
+                "type": "object",
+                "properties": {
+                    "sale_order_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "customer_name": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "customer_contact": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    },
+                    "quantity_received": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "sale_committed_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "customer_contact",
+                    "customer_name",
+                    "quantity_received",
+                    "sale_committed_at",
+                    "sale_order_id"
+                ]
+            },
+            "RecallReportResponse": {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/RecallReportItemResponse"
+                        },
+                        "readOnly": true
+                    },
+                    "total": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "items",
+                    "limit",
+                    "offset",
+                    "total"
+                ]
+            },
+            "RecallRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "minLength": 1
+                    }
+                },
+                "required": [
+                    "reason"
+                ]
+            },
+            "ReceiveLineRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "line_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "batch_code": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "expiration_date": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date"
+                    }
+                },
+                "required": [
+                    "batch_code",
+                    "line_id"
+                ]
+            },
+            "SalesOrderCommitRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "allocations": {
+                        "type": [
+                            "array",
+                            "null"
+                        ],
+                        "items": {
+                            "$ref": "#/components/schemas/ExplicitAllocationRequestRequest"
+                        }
+                    }
+                }
+            },
+            "SalesOrderCreateRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "customer_name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                    },
+                    "customer_contact": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "lines": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SalesOrderLineRequestRequest"
+                        },
+                        "minItems": 1
+                    }
+                },
+                "required": [
+                    "customer_name",
+                    "lines"
+                ]
+            },
+            "SalesOrderLineRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "product_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "quantity": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0.0001,
+                        "exclusiveMaximum": 10000000000
+                    },
+                    "sell_price": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0.0,
+                        "exclusiveMaximum": 10000000000
+                    }
+                },
+                "required": [
+                    "product_id",
+                    "quantity",
+                    "sell_price"
+                ]
+            },
+            "SalesOrderLineResponse": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "sales_order_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "product_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "quantity": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "sell_price": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,4})?$",
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "created_at",
+                    "id",
+                    "product_id",
+                    "quantity",
+                    "sales_order_id",
+                    "sell_price"
+                ]
+            },
+            "SalesOrderListResponse": {
+                "type": "object",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SalesOrderResponse"
+                        },
+                        "readOnly": true
+                    },
+                    "next_cursor": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "items",
+                    "next_cursor"
+                ]
+            },
+            "SalesOrderPreviewResponse": {
+                "type": "object",
+                "properties": {
+                    "allocations": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ProposedAllocationResponse"
+                        },
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "allocations"
+                ]
+            },
+            "SalesOrderResponse": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "owner_id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "customer_name": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "customer_contact": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "readOnly": true
+                    },
+                    "status": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "committed_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "voided_at": {
+                        "type": [
+                            "string",
+                            "null"
+                        ],
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "lines": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SalesOrderLineResponse"
+                        },
+                        "readOnly": true
+                    },
+                    "allocations": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AllocationResponse"
+                        },
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "allocations",
+                    "committed_at",
+                    "created_at",
+                    "customer_contact",
+                    "customer_name",
+                    "id",
+                    "lines",
+                    "owner_id",
+                    "status",
+                    "updated_at",
+                    "voided_at"
+                ]
+            },
+            "ErrorResponse": {
+                "type": "object",
+                "required": [
+                    "error"
+                ],
+                "properties": {
+                    "error": {
+                        "type": "string",
+                        "description": "Machine-readable error code (e.g. 'ValidationError', 'NotFound')."
+                    },
+                    "detail": {
+                        "type": "string",
+                        "description": "Human-readable explanation (optional)."
+                    },
+                    "fields": {
+                        "type": "object",
+                        "description": "Per-field validation errors keyed by field name (optional).",
+                        "additionalProperties": true
+                    }
+                }
+            }
+        },
+        "securitySchemes": {
+            "cookieAuth": {
+                "type": "apiKey",
+                "in": "cookie",
+                "name": "sessionid"
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "auth",
+            "description": "Authentication: signup, login, logout, and current-user."
+        },
+        {
+            "name": "catalog",
+            "description": "Product catalog: create, update, archive, and bulk CSV import."
+        },
+        {
+            "name": "procurement",
+            "description": "Purchase orders: draft, update, receive, and list."
+        },
+        {
+            "name": "inventory",
+            "description": "Batches and stock movements: FEFO tracking, recall, and audit log."
+        },
+        {
+            "name": "sales",
+            "description": "Sales orders: draft, preview FEFO allocations, commit, and void."
+        },
+        {
+            "name": "financials",
+            "description": "Financial reporting: margin by product and dashboard totals."
+        },
+        {
+            "name": "meta",
+            "description": "Operational endpoints: health probe and OpenAPI schema."
+        }
+    ]
+}

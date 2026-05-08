@@ -57,6 +57,8 @@ INSTALLED_APPS = [
     "apps.catalog",
     "apps.procurement",
     "apps.inventory",
+    "apps.sales",
+    "apps.financials",
 ]
 
 MIDDLEWARE = [
@@ -136,6 +138,10 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "EXCEPTION_HANDLER": "apps.core.exceptions.exception_handler",
+    # Disable DRF's ?format= URL override so that views can use ?format=csv
+    # as a plain query param for their own streaming CSV dispatch.
+    # Without this, DRF intercepts ?format=csv and returns 404 (no CSV renderer).
+    "URL_FORMAT_OVERRIDE": None,
 }
 
 # ---------------------------------------------------------------------------
@@ -157,5 +163,29 @@ SPECTACULAR_SETTINGS = {
                 "name": "sessionid",
             }
         }
+    },
+    "POSTPROCESSING_HOOKS": [
+        "drf_spectacular.hooks.postprocess_schema_enums",
+        "apps.core.openapi.inject_error_response_component",
+    ],
+    "SORT_OPERATION_PARAMETERS": True,
+    "COMPONENT_SPLIT_REQUEST": True,
+    # Explicit tag list — controls sidebar ordering in docs UIs and pins the
+    # tag-group set so a rename in a URL prefix doesn't churn the snapshot.
+    "TAGS": [
+        {"name": "auth", "description": "Authentication: signup, login, logout, and current-user."},
+        {"name": "catalog", "description": "Product catalog: create, update, archive, and bulk CSV import."},
+        {"name": "procurement", "description": "Purchase orders: draft, update, receive, and list."},
+        {"name": "inventory", "description": "Batches and stock movements: FEFO tracking, recall, and audit log."},
+        {"name": "sales", "description": "Sales orders: draft, preview FEFO allocations, commit, and void."},
+        {"name": "financials", "description": "Financial reporting: margin by product and dashboard totals."},
+        {"name": "meta", "description": "Operational endpoints: health probe and OpenAPI schema."},
+    ],
+    # Pin enum component names so that field-path renames don't churn
+    # generated FE type names.  Values are the raw choice lists that
+    # drf-spectacular hashes to identify the enum component.
+    "ENUM_NAME_OVERRIDES": {
+        "MovementKind": ["adjustment", "write_off"],
+        "ProductBaseUnit": ["g", "ml", "unit"],
     },
 }

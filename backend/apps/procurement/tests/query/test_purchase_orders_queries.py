@@ -7,14 +7,11 @@ constraint violations. No assertions on SQL text or internal structure.
 
 from __future__ import annotations
 
-import uuid
-from decimal import Decimal
 
 import psycopg
 import psycopg.errors
 import pytest
 
-from apps.core.tests.db_test import post_db, pre_db
 from apps.procurement.queries.purchase_orders import (
     delete_purchase_order,
     insert_purchase_order,

@@ -22,7 +22,6 @@ from apps.procurement.queries.purchase_order_lines import (
 from apps.procurement.queries.purchase_orders import (
     delete_purchase_order,
     insert_purchase_order,
-    select_purchase_order_by_id,
 )
 
 pytestmark = pytest.mark.django_db
