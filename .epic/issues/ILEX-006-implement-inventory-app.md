@@ -1,9 +1,9 @@
 ---
 id: ILEX-006
 github_id: null
-status: open
+status: completed
 assignee: null
-state: Queued
+state: Done
 type: item
 depends_on: [ILEX-005]
 ---

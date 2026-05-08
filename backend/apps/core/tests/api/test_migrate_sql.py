@@ -42,7 +42,7 @@ def _count_migrations(db) -> int:
         return cur.fetchone()[0]
 
 
-_EXPECTED_MIGRATIONS = 4  # 0001_init.sql + 0002_auth_fk.sql + 0003_catalog.sql + 0004_procurement.sql
+_EXPECTED_MIGRATIONS = 9  # 0001_init + 0002_auth_fk + 0003_catalog + 0004_procurement + 0005_inventory + 0006_views + 0007_sales + 0008_financials + 0009_indexes
 
 
 def test_migrate_sql_applies_and_is_idempotent(db):

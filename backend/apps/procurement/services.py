@@ -336,7 +336,7 @@ def receive_purchase_order(
             raise
 
     # Delegate batch + movement creation to apps.inventory
-    # ILEX-005: create_receipt_batches is a no-op stub; ILEX-006 fills the body.
+    # ILEX-006 fills the real body; signature is preserved from ILEX-005.
     create_receipt_batches(
         owner_id=owner_id,
         lines=[
@@ -349,6 +349,9 @@ def receive_purchase_order(
                 ),
                 "quantity": next(
                     ln["quantity"] for ln in db_lines if str(ln["id"]) == str(m["line_id"])
+                ),
+                "unit_cost": next(
+                    ln["unit_cost"] for ln in db_lines if str(ln["id"]) == str(m["line_id"])
                 ),
                 "purchase_order_line_id": str(m["line_id"]),
             }

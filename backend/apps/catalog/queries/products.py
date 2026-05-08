@@ -181,26 +181,10 @@ def list_products(cur, *, params: dict) -> tuple[list[dict], int]:
 def count_batches_for_product(cur, *, params: dict) -> int:
     """Return the number of batches referencing this product.
 
-    STUB: the `batches` table does not exist until Issue 006.
-    Probes information_schema.tables first; if absent returns 0.
-    Issue 006 replaces this body with a real SELECT COUNT(*) FROM batches.
-
     params keys:
       owner_id   : int
       product_id : str (UUID)
     """
-    cur.execute(
-        """
-        SELECT COUNT(*)
-          FROM information_schema.tables
-         WHERE table_schema = 'public'
-           AND table_name = 'batches'
-        """
-    )
-    batches_exists = cur.fetchone()[0] > 0
-    if not batches_exists:
-        return 0
-
     cur.execute(
         """
         SELECT COUNT(*)
