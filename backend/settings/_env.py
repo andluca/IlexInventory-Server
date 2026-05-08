@@ -1,13 +1,37 @@
 """Env-var helpers used across the settings modules.
 
-Fail fast on required vars; provide typed access for optional ones.
+Fail fast on required vars; provide typed access for optional ones. The
+``.env`` file at the project root is auto-loaded into ``os.environ`` on
+import so a fresh ``cp .env.example .env`` is enough — no shell sourcing
+needed.
 """
 
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
+
+
+def _load_dotenv() -> None:
+    """Load ``<project_root>/.env`` into ``os.environ`` (idempotent).
+
+    Existing environment variables win — ``.env`` only fills in the gaps,
+    matching standard dotenv-loader behaviour.
+    """
+    env_file = Path(__file__).resolve().parents[2] / ".env"
+    if not env_file.is_file():
+        return
+    for raw in env_file.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+_load_dotenv()
 
 
 def env(name: str) -> str:

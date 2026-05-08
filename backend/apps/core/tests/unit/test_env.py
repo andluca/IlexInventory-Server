@@ -88,3 +88,74 @@ def test_env_bool_uses_default_when_missing(monkeypatch: pytest.MonkeyPatch) -> 
     from settings._env import env_bool
 
     assert env_bool("_TEST_BOOL_MISSING", default=True) is True
+
+
+# --- _load_dotenv ---------------------------------------------------------
+
+
+def test_load_dotenv_populates_missing_vars(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A fresh `cp .env.example .env` should populate os.environ on import."""
+    from settings import _env
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("DOTENV_FRESH=picked-up\n")
+    monkeypatch.setattr(_env, "__file__", str(tmp_path / "stub" / "stub" / "stub.py"))
+    monkeypatch.delenv("DOTENV_FRESH", raising=False)
+
+    _env._load_dotenv()
+
+    assert __import__("os").environ.get("DOTENV_FRESH") == "picked-up"
+
+
+def test_load_dotenv_does_not_override_existing(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Existing env wins — `.env` only fills in the gaps."""
+    from settings import _env
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("DOTENV_KEEP=from-dotenv\n")
+    monkeypatch.setattr(_env, "__file__", str(tmp_path / "stub" / "stub" / "stub.py"))
+    monkeypatch.setenv("DOTENV_KEEP", "from-shell")
+
+    _env._load_dotenv()
+
+    assert __import__("os").environ.get("DOTENV_KEEP") == "from-shell"
+
+
+def test_load_dotenv_skips_comments_blanks_quotes(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Comments, blank lines, and surrounding quotes are stripped."""
+    from settings import _env
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "# header comment\n"
+        "\n"
+        'DOTENV_QUOTED="quoted-value"\n'
+        "DOTENV_PLAIN=plain-value\n"
+        "  # indented comment\n"
+    )
+    monkeypatch.setattr(_env, "__file__", str(tmp_path / "stub" / "stub" / "stub.py"))
+    monkeypatch.delenv("DOTENV_QUOTED", raising=False)
+    monkeypatch.delenv("DOTENV_PLAIN", raising=False)
+
+    _env._load_dotenv()
+
+    import os as _os
+    assert _os.environ.get("DOTENV_QUOTED") == "quoted-value"
+    assert _os.environ.get("DOTENV_PLAIN") == "plain-value"
+
+
+def test_load_dotenv_no_op_when_file_absent(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Missing `.env` is fine — loader is a silent no-op."""
+    from settings import _env
+
+    monkeypatch.setattr(_env, "__file__", str(tmp_path / "stub" / "stub" / "stub.py"))
+
+    _env._load_dotenv()  # must not raise

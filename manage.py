@@ -4,13 +4,18 @@
 Run `python manage.py help` for available commands.
 
 DJANGO_SETTINGS_MODULE defaults to `settings.dev`; set it to
-`settings.prod` in production.  The `backend/` directory must be on
-PYTHONPATH (pyproject.toml sets this for pytest; export PYTHONPATH=backend
-when running manage.py directly).
+`settings.prod` in production.  The ``backend/`` directory is added to
+``sys.path`` below so commands can be invoked from the project root
+without ``PYTHONPATH=backend``.
 """
 
 import os
 import sys
+from pathlib import Path
+
+_BACKEND = str(Path(__file__).resolve().parent / "backend")
+if _BACKEND not in sys.path:
+    sys.path.insert(0, _BACKEND)
 
 
 def main() -> None:
