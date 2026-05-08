@@ -1,6 +1,6 @@
 # Project Status
 
-Last updated: 2026-05-08T09:45:00Z (ILEX-005 planned)
+Last updated: 2026-05-08T12:02:20Z (ILEX-005 completed; ILEX-006 in_progress)
 
 ## Issues
 
@@ -8,8 +8,8 @@ Last updated: 2026-05-08T09:45:00Z (ILEX-005 planned)
 - [x] 002-setup-foundation-and-init-schema.md - completed (2026-05-08T00:05:00)
 - [x] 003-implement-auth-in-core.md - completed (2026-05-08T01:00:00)
 - [x] 004-implement-catalog-app.md - completed (2026-05-08T09:30:00Z)
-- [ ] 005-implement-procurement-app.md - in_progress (2026-05-08T10:00:00Z)
-- [ ] 006-implement-inventory-app.md - pending
+- [x] 005-implement-procurement-app.md - completed (2026-05-08T12:02:20Z)
+- [ ] 006-implement-inventory-app.md - in_progress (2026-05-08T12:02:20Z)
 - [ ] 007-implement-sales-app.md - pending
 - [ ] 008-implement-financials-app.md - pending
 - [ ] 009-add-csv-exports-and-indexes.md - pending
@@ -23,9 +23,9 @@ Last updated: 2026-05-08T09:45:00Z (ILEX-005 planned)
 ## Summary
 
 Total: 15 issues
-Completed: 4
-In progress: 0
-Pending: 11
+Completed: 5
+In progress: 1
+Pending: 9
 Failed: 0
 
 ## Execution Log
@@ -37,6 +37,7 @@ Failed: 0
 - 2026-05-08: ILEX-004 completed — `0003_catalog.sql` + full apps/catalog vertical; 72 new tests (8 query, 17 service, 23 unit, 24 api); 186/186 total green; all gates clean.
 - 2026-05-08T08:55Z: post-ILEX-004 cleanup — discipline rules tightened in `.claude/skills/{ilex-discipline,tdd}/SKILL.md` (no function-local imports outside `tests/`; no implementation-coupled tests). Hoisted 22 function-local imports across `apps/{core,catalog}/` to module top, hoisted function-local imports across 18 test files. Deleted `tests/unit/test_csv_parser.py` (8 tests on `_parse_csv_bytes`/`_validate_csv_row` private helpers); BOM/CRLF/blank-SKU coverage relocated to `tests/service/test_import_products_csv.py` as behavioral cases. Deleted 3 service tests that monkey-patched `count_batches_for_product` — "with batches" coverage deferred to ILEX-006 where `batches` table exists. 178/178 green.
 - 2026-05-08T09:45Z: ILEX-005 planned — `0004_procurement.sql` (purchase_orders + purchase_order_lines, composite FKs to products + auth_user, status `draft|received` CHECK, money/qty `numeric(14,4)` with positivity CHECKs) + apps/procurement vertical (6 endpoints, draft CRUD, receive). Receive's batch + movement creation deferred to ILEX-006 via a real `apps.inventory.services.create_receipt_batches` stub that ships in this issue (module-top import, no monkey-patching, behavioral tests only). Migration filename is `0004_procurement.sql` not `0003_procurement.sql` (drift since ILEX-004 took 0003 for catalog).
+- 2026-05-08T12:02Z: ILEX-005 completed — `0004_procurement.sql` + apps/procurement vertical (6 endpoints) + apps/inventory stub; 84 new tests (procurement query/service/api/unit + inventory unit); 262/262 total green. One stray function-local import in `tests/unit/test_serializers.py` hoisted on completion. Receive ledger writes still deferred to ILEX-006.
 
 ## Notes
 

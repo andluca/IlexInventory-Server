@@ -11,5 +11,6 @@ from drf_spectacular.views import SpectacularAPIView
 urlpatterns = [
     path("api/v1/", include("apps.core.urls")),
     path("api/v1/", include("apps.catalog.urls")),
+    path("api/v1/", include("apps.procurement.urls")),
     path("api/v1/openapi.json", SpectacularAPIView.as_view(), name="schema"),
 ]
