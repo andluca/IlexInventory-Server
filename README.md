@@ -20,7 +20,7 @@ Five technical choices that separate Ilex from a generic CRUD inventory app:
 | **Owner isolation, three layers** | Service-layer injection + composite FKs `(id, owner_id)` + `@scoped` query helper. Cross-owner access returns **404, not 403** — don't leak existence. |
 | **No Django ORM, raw psycopg** | All persistence is parameterized SQL. Migrations are plain `.sql` files. CI grep gates fail on `from django.db.models` outside the one allowlisted file (auth — see [BE-D14](docs/decisions.md)). |
 
-**Plus** an agent (Phase 3): "Ask Ilex" — three modes (Query / Draft / Explain) running against a read-only DB role, allowlisted views only, 5s statement timeout, 1000-row cap. See [`docs/product.md`](docs/product.md).
+**Plus** an agent (Phase 3): "Ask Ilex" — three modes (Query / Draft / Explain) running against a read-only Postgres role (`ilex_agent_ro`), allowlisted views only, owner-filtered via session GUC, 5s statement timeout, 1000-row cap. The schema decisions (ledger, immutable allocations, FEFO, allowlisted views) exist partly to make Explain mode trustworthy. See [`docs/agent.md`](docs/agent.md) for the runtime story and [`docs/specs/agent.md`](docs/specs/agent.md) for the spec.
 
 ---
 
@@ -138,7 +138,7 @@ CI gates per [`docs/specs/SPEC.md`](docs/specs/SPEC.md):
 ```bash
 mypy backend/                                                                    # type check
 ruff check backend/                                                              # lint
-grep -RE "from django.db.models" backend/apps/ | grep -v auth.py | wc -l         # 0 (BE-D14 carve-out)
+scripts/check_no_orm.sh                                                          # 0 ORM imports outside auth.py (BE-D14 carve-out)
 grep -RE "cursor\.execute" backend/apps/*/services.py backend/apps/*/apis.py     # 0 (BE-D12)
 ```
 
@@ -154,13 +154,17 @@ grep -RE "cursor\.execute" backend/apps/*/services.py backend/apps/*/apis.py    
 | [`docs/decisions.md`](docs/decisions.md) | 15 numbered architectural decisions (D0–D14), each with rationale + rejected alternatives |
 | [`docs/specs/SPEC.md`](docs/specs/SPEC.md) | Full project specification: foundation, features per app, validation gates, phases, decisions table |
 | [`docs/endpoints.md`](docs/endpoints.md) | Endpoint catalog (36 endpoints, by app) with idempotency + pagination columns |
-| [`docs/issues/`](docs/issues/) | Implementation issue breakdown — 11 vertical-slice issues derived from `SPEC.md` |
+| [`docs/issues/`](docs/issues/) | Implementation issue breakdown — 11 v1 MVP issues + 4 Phase 3 agent issues derived from the specs |
+| [`docs/agent.md`](docs/agent.md) | "Ask Ilex" agent — runtime narrative, three modes, why the schema decisions enable Explain mode |
+| [`docs/specs/agent.md`](docs/specs/agent.md) | Agent implementation spec (Phase 3): foundation, modes, validation gates, decisions D15–D16 |
 
 ---
 
 ## Implementation status
 
-The work is sliced into 11 issues (see [`docs/issues/status.md`](docs/issues/status.md)). Each issue ships a complete vertical: schema → queries → services → API → tests.
+15 issues total (see [`docs/issues/status.md`](docs/issues/status.md)). Each ships a complete vertical: schema → queries → services → API → tests.
+
+**v1 MVP** (11 issues):
 
 | # | Issue | Status |
 |---|---|---|
@@ -176,7 +180,16 @@ The work is sliced into 11 issues (see [`docs/issues/status.md`](docs/issues/sta
 | 010 | OpenAPI + FE handoff | ⏳ pending |
 | 011 | Deploy (Docker, CI) | ⏳ pending |
 
-Phase 3 (Agent: `/agent/chat`, read-only role, allowlisted views) is spec'd but explicitly out of v1 MVP scope.
+**Phase 3 — Agent** (4 issues, post-MVP):
+
+| # | Issue | Status |
+|---|---|---|
+| 012 | Agent foundation + `ilex_agent_ro` read-only role + view rewrites | ⏳ pending |
+| 013 | `/agent/chat` endpoint + Query mode + SSE streaming | ⏳ pending |
+| 014 | Draft mode + domain skill files | ⏳ pending |
+| 015 | Onboarding skill + empty-state integration | ⏳ pending |
+
+The agent is out of v1 MVP, but its schema commitments (read-only role, owner-filtered views) ship from day one so the agent can be turned on later without migrating data.
 
 ---
 
