@@ -4,8 +4,8 @@ Last updated: 2026-05-08
 
 ## Issues
 
-- [x] 001-bootstrap-django-project.md - in_progress (2026-05-08T00:00:00)
-- [ ] 002-setup-foundation-and-init-schema.md - pending
+- [x] 001-bootstrap-django-project.md - completed (2026-05-08T00:00:00)
+- [x] 002-setup-foundation-and-init-schema.md - completed (2026-05-08T00:05:00)
 - [ ] 003-implement-auth-in-core.md - pending
 - [ ] 004-implement-catalog-app.md - pending
 - [ ] 005-implement-procurement-app.md - pending
@@ -19,14 +19,15 @@ Last updated: 2026-05-08
 ## Summary
 
 Total: 11 issues
-Completed: 0
-In progress: 1
-Pending: 10
+Completed: 2
+In progress: 0
+Pending: 9
 Failed: 0
 
 ## Execution Log
 
-(Entries added as issues are processed)
+- 2026-05-08: ILEX-001 completed — Django 5.1 + DRF + drf-spectacular skeleton bootstrapped; `GET /api/v1/health` (200/503) and `GET /api/v1/openapi.json` (OpenAPI 3.1.0) live; 48/48 tests green.
+- 2026-05-08: ILEX-002 completed — Foundation helpers + 0001_init schema; 34 new tests; 82/82 green.
 
 ## Notes
 
