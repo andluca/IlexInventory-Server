@@ -45,7 +45,7 @@ For *what* the product is, see [`product.md`](product.md). For *why* specific ch
 
 These are not preferences. CI gates and code review enforce them because Django's defaults would otherwise quietly violate them.
 
-1. **Stock is a ledger.** Every change is an append-only row in `stock_movements`. Current stock is a derived query; no `stock_quantity` columns anywhere.
+1. **Stock is a ledger.** Every change is an append-only row in `stock_movements`. Current stock is a derived query; no `stock_quantity` columns anywhere. *Brief mapping: what the take-home brief calls "Stock" maps to our `batches` table (the stock items — each with a unique `batches.id`, UUIDv7) plus `stock_movements` (the history); on-hand is derived from movements, never stored.*
 2. **No Django ORM.** All persistence is parameterized SQL via psycopg. Migrations are plain `.sql` files.
 3. **No SQL outside `queries/`.** Services, selectors, and APIs never call `cursor.execute`.
 4. **Owner-scoped queries route through the `@scoped` helper.** Cross-owner access returns 404 (D4). Composite FKs `(id, owner_id)` are the DB-level safety net.
