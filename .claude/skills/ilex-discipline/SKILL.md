@@ -16,6 +16,7 @@ CI fails on violation:
 3. Money and quantity are `Decimal` in Python, `numeric(14, 4)` in DB. Never `float`.
 4. Owner-scoped queries use `@scoped` from `apps.core.owner_scope`. Cross-owner access returns 404, never 403 (D4).
 5. `stock_movements` is append-only. No UPDATE, no DELETE. Corrections are new rows.
+6. Imports go at the top of the module. Function-local `from apps.X import Y` is **forbidden** unless a single-line comment names the circular import being broken (e.g. `# break cycle: apps.core.idempotency → apps.core.errors → apps.core.idempotency`). Lazy loading for performance is not a valid reason — Python caches modules. `grep -nE "^\s+(from|import) apps\." backend/apps/**/*.py` (excluding `tests/`) returns only commented breaks.
 
 ## Layer rules
 
@@ -93,4 +94,5 @@ apps/{app}/
 - `grep -RE "cursor\.execute" backend/apps/*/services.py backend/apps/*/selectors.py backend/apps/*/apis.py` returns empty.
 - Every owner-scoped query function in `apps/{app}/queries/*.py` is decorated with `@scoped`.
 - No floats in money or quantity paths.
+- No function-local `from apps.…` / `import apps.…` outside `tests/`, except lines that carry a `# break cycle: …` comment.
 - OpenAPI regenerates without errors.

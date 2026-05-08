@@ -13,14 +13,26 @@ description: TDD cycle and test-type guide for the Ilex backend (pytest + real P
 
 Skipping refactor turns TDD into iteration.
 
+## Behavioral, not structural
+
+Tests describe **what** the code does, not **how**. The contract: same inputs → same outputs and same observable DB state. Internal restructure (rename, split a function, swap an algorithm, replace `csv.DictReader` with a parser library) must leave the suite green. Specifically:
+
+- **Never import a name starting with `_`.** Private helpers exist for the implementation; they are not the surface. If a private helper has behavior worth a test, the test belongs at the next layer up (where the helper is reachable through public surface), or the helper should be promoted.
+- **Never assert which intermediate function ran.** No spies, no call-counters. Only outcomes: return value, raised exception, `post_db` state, HTTP status + body.
+- **Never test through internal state.** `post_db` reads tables the schema declares; that's the contract. Reading a private dict, a cache, or a module-level variable is not.
+
+If you cannot cover an edge case without one of the above, the case is wrong-layered — move it up.
+
 ## Test types
 
-| Type | Location | Tests | DB |
+Each layer tests its own **public surface**. The unit below is the public boundary that callers above rely on.
+
+| Type | Location | Public surface | DB |
 |---|---|---|---|
-| Unit | `apps/{app}/tests/unit/` | Pure logic. | No |
-| Query | `apps/{app}/tests/query/` | One query — SQL round-trip, NULL, view shape. | Yes |
-| Service | `apps/{app}/tests/service/` | Composition — transactions, FEFO, cross-owner = 404. | Yes |
-| API | `apps/{app}/tests/api/` | HTTP round-trip via DRF test client. | Yes |
+| Unit | `apps/{app}/tests/unit/` | A public function/class exported from `serializers`/`errors`/`types`. Pure logic only. **Never a `_private` helper.** | No |
+| Query | `apps/{app}/tests/query/` | One exported function from `apps/{app}/queries/{aggregate}.py`. Asserts on rows + `pg_constraint` introspection. | Yes |
+| Service | `apps/{app}/tests/service/` | One exported function from `apps/{app}/services.py`. Asserts on return value + `post_db`. Cross-owner = 404. | Yes |
+| API | `apps/{app}/tests/api/` | One HTTP route via DRF test client. Asserts on status code + JSON body. | Yes |
 
 ## State pattern
 
@@ -55,6 +67,7 @@ Local: `docker compose up -d postgres`. CI: `postgres:16` service container. Sch
 - Mocking psycopg or the cursor.
 - Building test state via the service under test.
 - Skipping the cross-owner test.
+- Importing a `_private` helper into a test (see "Behavioral, not structural"). If a test reads `_parse_csv_bytes` directly, it bound the test to a current implementation choice — the same edge case (BOM, CRLF, blank field) is reachable through the service or HTTP entry point.
 
 ## Run
 
