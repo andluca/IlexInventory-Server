@@ -93,3 +93,21 @@ Four layers. APIs (DRF, thin) call Services (writes, transactions) or Selectors 
 Adapts the HackSoft Django Styleguide (`github.com/HackSoftware/Django-Styleguide`) to our no-ORM constraint. HackSoft splits business logic into Services (writes) and Selectors (reads), keeps APIs thin, and explicitly rejects the Repository pattern: *"trying to place all of your business logic in a custom manager is not a great idea."* Their pattern assumes the ORM absorbs SQL via models; we don't have that, so we add an explicit Queries layer to host parameterized SQL functions per aggregate.
 
 Rejected: 3-layer (HTTP → Service-with-inline-SQL → DB) — services bloat with SQL strings, hard to grep/audit, no place for the agent's allowlisted-view functions to live cleanly. Rejected: Repository pattern (HTTP → Service → Repository → DB) — imports DDD/Java vocabulary that doesn't fit Django culture; per HackSoft, services-vs-selectors is the idiomatic Django split for the same problem.
+
+## D14 — `django.contrib.auth.User` is the only ORM-managed model
+
+`django.contrib.auth.User` (and the auth app's session/migration tables) are the **only** Django ORM-managed entities in the project. Every business model — products, POs, batches, stock_movements, SOs, allocations, idempotency keys — is raw SQL via psycopg per D12.
+
+Why the carve-out: writing our own users table forces us to re-implement password hashing, session management, and the auth middleware Django ships with — for no v1 benefit. The architecture's "no Django ORM" rule exists to keep business logic out of model layers, not to forbid using Django's built-in auth.
+
+**Boundary:** the `auth_user` table is provisioned by Django's standard migration (`python manage.py migrate auth`). Our raw-SQL migrations under `backend/migrations/` reference `auth_user.id` via composite FK `(owner_id, ...)` patterns; the FK target is `auth_user(id)`. No business code imports `User.objects` — services receive `owner_id` as a UUID parameter from the API layer, never a Django model instance.
+
+CI grep gate is updated: `from django.db.models` is forbidden **except** in `apps/core/auth.py` (which is allowed to `from django.contrib.auth import authenticate, login, logout, get_user_model`). All other imports of Django ORM machinery fail the gate.
+
+Rejected: a bespoke users table written in raw SQL. Would re-implement Django's password hashers, session machinery, CSRF, and auth views — work that adds no v1 value and risks security bugs in our hand-rolled crypto/session code.
+
+`profit_margin = (revenue − COGS) / COGS × 100%`. Matches the take-home brief's worked example exactly: `$1,000` revenue − `$100` cost = `$900` profit / `$100` cost = **900%**. Reported in API and UI as "Profit Margin".
+
+Standard "profit margin" in finance textbooks is `(revenue − COGS) / revenue × 100%` (which would give 90% on the same example) — that definition is **not** what the brief expects. We label our metric "Profit Margin" to match the brief's wording but compute it as markup / return-on-cost.
+
+Rejected: textbook gross-margin formula (would silently disagree with the brief's evaluation example); reporting both side-by-side (clutters the dashboard for no v1 benefit).
