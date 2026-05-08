@@ -1,7 +1,7 @@
 ---
 id: ILEX-002
 github_id: null
-status: open
+status: completed
 assignee: null
 state: Done
 type: item
