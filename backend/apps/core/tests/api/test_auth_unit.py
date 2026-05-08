@@ -9,12 +9,14 @@ All tests are marked django_db to allow ORM access via pytest-django.
 from __future__ import annotations
 
 import os
+import uuid
 
 import psycopg
 import pytest
 from django.contrib.sessions.backends.db import SessionStore
 from django.test import RequestFactory
 
+from apps.core.auth import authenticate_user, logout_user, signup_user
 from apps.core.errors import Conflict, Unauthorized
 
 pytestmark = pytest.mark.django_db
@@ -49,7 +51,6 @@ def _make_request(path: str = "/") -> object:
 
 
 def _unique_email(prefix: str = "auth_unit") -> str:
-    import uuid
     return f"{prefix}_{uuid.uuid4().hex[:8]}@test.invalid"
 
 
@@ -59,8 +60,6 @@ def _unique_email(prefix: str = "auth_unit") -> str:
 
 def test_signup_user_creates_auth_user_row():
     """signup_user creates exactly one auth_user row with the given email."""
-    from apps.core.auth import signup_user
-
     email = _unique_email("signup_creates")
     request = _make_request()
 
@@ -75,8 +74,6 @@ def test_signup_user_creates_auth_user_row():
 
 def test_signup_user_hashes_password():
     """signup_user stores a hashed password, not plaintext."""
-    from apps.core.auth import signup_user
-
     email = _unique_email("signup_hash")
     request = _make_request()
 
@@ -90,8 +87,6 @@ def test_signup_user_hashes_password():
 
 def test_signup_user_duplicate_email_raises_conflict():
     """signup_user raises Conflict on duplicate email."""
-    from apps.core.auth import signup_user
-
     email = _unique_email("signup_dup")
     request = _make_request()
 
@@ -107,8 +102,6 @@ def test_signup_user_duplicate_email_raises_conflict():
 
 def test_authenticate_user_returns_user_on_correct_creds():
     """authenticate_user returns the User on correct email + password."""
-    from apps.core.auth import authenticate_user, signup_user
-
     email = _unique_email("auth_ok")
     password = "correct-horse-battery"
     request = _make_request()
@@ -124,8 +117,6 @@ def test_authenticate_user_returns_user_on_correct_creds():
 
 def test_authenticate_user_wrong_password_raises_unauthorized():
     """authenticate_user raises Unauthorized on wrong password."""
-    from apps.core.auth import authenticate_user, signup_user
-
     email = _unique_email("auth_badpwd")
     request = _make_request()
 
@@ -138,8 +129,6 @@ def test_authenticate_user_wrong_password_raises_unauthorized():
 
 def test_authenticate_user_unknown_email_raises_unauthorized():
     """authenticate_user raises Unauthorized for unknown email (no enumeration)."""
-    from apps.core.auth import authenticate_user
-
     request = _make_request()
     with pytest.raises(Unauthorized):
         authenticate_user(request, email="nobody@test.invalid", password="any-password")
@@ -151,8 +140,6 @@ def test_authenticate_user_unknown_email_raises_unauthorized():
 
 def test_logout_user_clears_session():
     """logout_user calls django.contrib.auth.logout, clearing the session."""
-    from apps.core.auth import logout_user, signup_user
-
     email = _unique_email("logout")
     request = _make_request()
 

@@ -5,8 +5,11 @@ Cursor format: base64url(f"{uuid}|{created_at.isoformat()}")
 
 from __future__ import annotations
 
+import base64
 import uuid
 from datetime import datetime, timezone
+
+from apps.core.pagination import decode_cursor, encode_cursor
 
 
 def _utcnow() -> datetime:
@@ -14,8 +17,6 @@ def _utcnow() -> datetime:
 
 
 def test_roundtrip():
-    from apps.core.pagination import decode_cursor, encode_cursor
-
     u = uuid.uuid4()
     t = _utcnow()
     cursor = encode_cursor(u, t)
@@ -30,37 +31,26 @@ def test_roundtrip():
 
 
 def test_decode_none_returns_none():
-    from apps.core.pagination import decode_cursor
-
     assert decode_cursor(None) is None
 
 
 def test_decode_invalid_base64_returns_none():
-    from apps.core.pagination import decode_cursor
-
     assert decode_cursor("not-base64!!!") is None
 
 
 def test_decode_valid_b64_wrong_shape_returns_none():
     """Valid base64, but the payload doesn't contain a pipe separator."""
-    from apps.core.pagination import decode_cursor
-
     assert decode_cursor("dmFsaWRiNjQ=") is None
 
 
 def test_decode_wrong_separator_count_returns_none():
     """Too many pipes (would trip UUID parse)."""
-    from apps.core.pagination import decode_cursor
-    import base64
-
     junk = base64.urlsafe_b64encode(b"a|b|c").decode()
     assert decode_cursor(junk) is None
 
 
 def test_no_logging_on_bad_cursor(caplog):
     """Bad-cursor fallback must be silent (no log lines emitted)."""
-    from apps.core.pagination import decode_cursor
-
     with caplog.at_level("DEBUG"):
         decode_cursor("garbage-input")
 

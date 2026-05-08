@@ -24,6 +24,9 @@ import psycopg
 from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory, force_authenticate
+from rest_framework.views import APIView
+
+from apps.core.idempotency import idempotent
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -72,9 +75,6 @@ _call_counter: dict[str, int] = {"count": 0}
 
 def _make_stub_view(endpoint: str):
     """Return a DRF view decorated with @idempotent for the given endpoint."""
-    from apps.core.idempotency import idempotent
-    from rest_framework.views import APIView
-
     class StubView(APIView):
         authentication_classes = []
         permission_classes = []

@@ -24,6 +24,10 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.auth import authenticate_user, logout_user, signup_user
+from apps.core.errors import DomainError, to_response
+from apps.core.serializers import LoginRequest, SignupRequest, UserResponse
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -119,10 +123,6 @@ class SignupView(APIView):
         summary="Sign up a new account",
     )
     def post(self, request: Request) -> Response:
-        from apps.core.auth import signup_user
-        from apps.core.errors import DomainError, to_response
-        from apps.core.serializers import SignupRequest, UserResponse
-
         serializer = SignupRequest(data=request.data)
         if not serializer.is_valid():
             return Response(
@@ -159,10 +159,6 @@ class LoginView(APIView):
         summary="Log in with email and password",
     )
     def post(self, request: Request) -> Response:
-        from apps.core.auth import authenticate_user
-        from apps.core.errors import DomainError, to_response
-        from apps.core.serializers import LoginRequest, UserResponse
-
         serializer = LoginRequest(data=request.data)
         if not serializer.is_valid():
             return Response(
@@ -196,8 +192,6 @@ class LogoutView(APIView):
         summary="Log out the current session",
     )
     def post(self, request: Request) -> Response:
-        from apps.core.auth import logout_user
-
         logout_user(request._request)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -215,6 +209,4 @@ class MeView(APIView):
         summary="Return the current authenticated user",
     )
     def get(self, request: Request) -> Response:
-        from apps.core.serializers import UserResponse
-
         return Response({"user": UserResponse(request.user).data}, status=status.HTTP_200_OK)

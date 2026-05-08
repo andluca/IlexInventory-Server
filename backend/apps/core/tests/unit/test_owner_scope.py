@@ -11,10 +11,10 @@ import uuid
 
 import pytest
 
+from apps.core.owner_scope import scoped
+
 
 def test_scoped_raises_on_empty_params():
-    from apps.core.owner_scope import scoped
-
     @scoped
     def query(params: dict) -> str:
         return "ok"
@@ -24,8 +24,6 @@ def test_scoped_raises_on_empty_params():
 
 
 def test_scoped_raises_on_none_owner_id():
-    from apps.core.owner_scope import scoped
-
     @scoped
     def query(params: dict) -> str:
         return "ok"
@@ -35,8 +33,6 @@ def test_scoped_raises_on_none_owner_id():
 
 
 def test_scoped_passes_through_with_valid_owner_id():
-    from apps.core.owner_scope import scoped
-
     owner = uuid.uuid4()
 
     @scoped
@@ -49,8 +45,6 @@ def test_scoped_passes_through_with_valid_owner_id():
 
 def test_scoped_keyword_call():
     """Decorator works when params is passed as a keyword argument."""
-    from apps.core.owner_scope import scoped
-
     owner = uuid.uuid4()
 
     @scoped
@@ -63,8 +57,6 @@ def test_scoped_keyword_call():
 
 def test_scoped_positional_call():
     """Decorator works when params is passed as the first positional argument."""
-    from apps.core.owner_scope import scoped
-
     owner = uuid.uuid4()
 
     @scoped
@@ -76,8 +68,6 @@ def test_scoped_positional_call():
 
 
 def test_scoped_preserves_function_name():
-    from apps.core.owner_scope import scoped
-
     @scoped
     def my_query(params: dict) -> None:
         pass

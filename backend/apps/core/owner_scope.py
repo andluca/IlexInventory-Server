@@ -27,11 +27,16 @@ def scoped(fn: Callable[..., Any]) -> Callable[..., Any]:
 
     @functools.wraps(fn)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
-        # Resolve params: first positional arg or keyword arg named 'params'.
-        if args:
+        # Resolve params: prefer keyword arg 'params' when present; fall back
+        # to the first positional arg. This supports both the single-arg pattern
+        # (query(params={...})) and the cursor-first pattern used in catalog
+        # queries (query(cur, params={...})).
+        if "params" in kwargs:
+            params = kwargs["params"]
+        elif args:
             params = args[0]
         else:
-            params = kwargs.get("params", {})
+            params = {}
 
         if not isinstance(params, dict) or params.get("owner_id") is None:
             raise ValueError(

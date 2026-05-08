@@ -11,6 +11,8 @@ import os
 import subprocess
 import sys
 
+import psycopg
+
 
 SETTINGS = "settings.dev"
 # backend/ is 5 levels up from this file (tests/api/ → tests/ → core/ → apps/ → backend/)
@@ -40,13 +42,11 @@ def _count_migrations(db) -> int:
         return cur.fetchone()[0]
 
 
-_EXPECTED_MIGRATIONS = 2  # 0001_init.sql + 0002_auth_fk.sql
+_EXPECTED_MIGRATIONS = 3  # 0001_init.sql + 0002_auth_fk.sql + 0003_catalog.sql
 
 
 def test_migrate_sql_applies_and_is_idempotent(db):
     """First run applies all pending SQL migrations; second run is a no-op."""
-    import psycopg
-
     db_url = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ilex_test")
 
     # First run — may output "applied: …" or "up to date" depending on whether

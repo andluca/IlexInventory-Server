@@ -11,25 +11,21 @@ from __future__ import annotations
 
 import uuid
 
+from apps.core.ids import uuidv7
+
 
 def test_uuidv7_returns_uuid_instance():
-    from apps.core.ids import uuidv7
-
     result = uuidv7()
     assert isinstance(result, uuid.UUID)
 
 
 def test_uuidv7_version_is_7():
-    from apps.core.ids import uuidv7
-
     result = uuidv7()
     assert result.version == 7
 
 
 def test_uuidv7_variant_bits():
     """Bits 64-65 must be 0b10 (RFC 4122 variant)."""
-    from apps.core.ids import uuidv7
-
     result = uuidv7()
     # The variant is encoded in the high bits of clock_seq_hi_variant.
     # For variant 1 (RFC 4122), bits 7-6 of clock_seq_hi_variant must be 0b10.
@@ -40,8 +36,6 @@ def test_uuidv7_monotonicity():
     """1000 sequential calls must produce non-decreasing timestamp prefixes.
     Since we may be in the same millisecond, equal prefixes are allowed;
     strictly decreasing is the failure case."""
-    from apps.core.ids import uuidv7
-
     ids = [uuidv7() for _ in range(1000)]
     # Extract the 48-bit timestamp prefix (first 12 hex chars = 48 bits).
     timestamps = [int(str(u).replace("-", "")[:12], 16) for u in ids]

@@ -32,6 +32,8 @@ from django.conf import settings
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from apps.core.errors import ValidationError, to_response
+
 
 def idempotent(endpoint: str) -> Callable:
     """View decorator — enforces Idempotency-Key caching on mutating endpoints.
@@ -45,8 +47,6 @@ def idempotent(endpoint: str) -> Callable:
         def wrapper(self_or_view, request: Request, *args: Any, **kwargs: Any) -> Response:
             idempotency_key = request.META.get("HTTP_IDEMPOTENCY_KEY")
             if not idempotency_key:
-                from apps.core.errors import ValidationError, to_response
-
                 body, status = to_response(
                     ValidationError(
                         detail="Idempotency-Key header required"

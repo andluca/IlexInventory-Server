@@ -6,6 +6,8 @@ Session cookies are managed by the test client.
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from rest_framework.test import APIClient
 
@@ -19,7 +21,6 @@ _ME_URL = "/api/v1/auth/me"
 
 
 def _unique_email(prefix: str = "api") -> str:
-    import uuid
     return f"{prefix}_{uuid.uuid4().hex[:8]}@test.invalid"
 
 

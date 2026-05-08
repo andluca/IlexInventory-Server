@@ -13,6 +13,8 @@ Django's CsrfViewMiddleware on any response), then pass it as X-CSRFToken.
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from django.test import Client
 from rest_framework.test import APIClient
@@ -26,7 +28,6 @@ _LOGOUT_URL = "/api/v1/auth/logout"
 
 
 def _unique_email(prefix: str = "csrf") -> str:
-    import uuid
     return f"{prefix}_{uuid.uuid4().hex[:8]}@test.invalid"
 
 

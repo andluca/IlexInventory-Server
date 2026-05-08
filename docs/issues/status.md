@@ -1,14 +1,14 @@
 # Project Status
 
-Last updated: 2026-05-08 (Phase 3 agent issues added: ILEX-012 to ILEX-015)
+Last updated: 2026-05-08T09:45:00Z (ILEX-005 planned)
 
 ## Issues
 
 - [x] 001-bootstrap-django-project.md - completed (2026-05-08T00:00:00)
 - [x] 002-setup-foundation-and-init-schema.md - completed (2026-05-08T00:05:00)
 - [x] 003-implement-auth-in-core.md - completed (2026-05-08T01:00:00)
-- [ ] 004-implement-catalog-app.md - pending
-- [ ] 005-implement-procurement-app.md - pending
+- [x] 004-implement-catalog-app.md - completed (2026-05-08T09:30:00Z)
+- [ ] 005-implement-procurement-app.md - in_progress (2026-05-08T10:00:00Z)
 - [ ] 006-implement-inventory-app.md - pending
 - [ ] 007-implement-sales-app.md - pending
 - [ ] 008-implement-financials-app.md - pending
@@ -23,9 +23,9 @@ Last updated: 2026-05-08 (Phase 3 agent issues added: ILEX-012 to ILEX-015)
 ## Summary
 
 Total: 15 issues
-Completed: 3
+Completed: 4
 In progress: 0
-Pending: 12
+Pending: 11
 Failed: 0
 
 ## Execution Log
@@ -33,6 +33,10 @@ Failed: 0
 - 2026-05-08: ILEX-001 completed — Django 5.1 + DRF + drf-spectacular skeleton bootstrapped; `GET /api/v1/health` (200/503) and `GET /api/v1/openapi.json` (OpenAPI 3.1.0) live; 48/48 tests green.
 - 2026-05-08: ILEX-002 completed — Foundation helpers + 0001_init schema; 34 new tests; 82/82 green.
 - 2026-05-08: ILEX-003 completed — Auth (signup/login/logout/me) + FK migration + ORM allowlist; 28 new tests; 110/110 green.
+- 2026-05-08: ILEX-004 planned — `0003_catalog.sql` + apps/catalog vertical (7 endpoints, CSV import) plotted; SKU-lock seam deferred to Issue 006 via stubbed `count_batches_for_product`; on-hand projection in list endpoint deferred to Issue 008.
+- 2026-05-08: ILEX-004 completed — `0003_catalog.sql` + full apps/catalog vertical; 72 new tests (8 query, 17 service, 23 unit, 24 api); 186/186 total green; all gates clean.
+- 2026-05-08T08:55Z: post-ILEX-004 cleanup — discipline rules tightened in `.claude/skills/{ilex-discipline,tdd}/SKILL.md` (no function-local imports outside `tests/`; no implementation-coupled tests). Hoisted 22 function-local imports across `apps/{core,catalog}/` to module top, hoisted function-local imports across 18 test files. Deleted `tests/unit/test_csv_parser.py` (8 tests on `_parse_csv_bytes`/`_validate_csv_row` private helpers); BOM/CRLF/blank-SKU coverage relocated to `tests/service/test_import_products_csv.py` as behavioral cases. Deleted 3 service tests that monkey-patched `count_batches_for_product` — "with batches" coverage deferred to ILEX-006 where `batches` table exists. 178/178 green.
+- 2026-05-08T09:45Z: ILEX-005 planned — `0004_procurement.sql` (purchase_orders + purchase_order_lines, composite FKs to products + auth_user, status `draft|received` CHECK, money/qty `numeric(14,4)` with positivity CHECKs) + apps/procurement vertical (6 endpoints, draft CRUD, receive). Receive's batch + movement creation deferred to ILEX-006 via a real `apps.inventory.services.create_receipt_batches` stub that ships in this issue (module-top import, no monkey-patching, behavioral tests only). Migration filename is `0004_procurement.sql` not `0003_procurement.sql` (drift since ILEX-004 took 0003 for catalog).
 
 ## Notes
 
