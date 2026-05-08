@@ -1,7 +1,20 @@
 .env
 .claude/settings.local.json
+
+# Python build artifacts
 __pycache__
+*.egg-info/
+*.egg
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
 
 # epic-cli runtime state (committed: settings.json + issues; ignored: sessions + worktrees)
 .epic/sessions/
 .epic/.worktrees/
+
+.claude/skills/firecrawl
