@@ -26,7 +26,7 @@ from apps.sales.queries.sales_orders import (
     list_sales_orders as _list_sales_orders_query,
     select_sales_order_by_id as _select_so_by_id_query,
 )
-from apps.sales.services import _row_to_so
+from apps.sales._assemble import row_to_sales_order
 from apps.sales.types import SalesOrderRow
 
 
@@ -47,7 +47,7 @@ def sales_order_by_id(*, owner_id: int, so_id: str) -> SalesOrderRow | None:
             allocs = _select_allocations_query(
                 cur, params={"sales_order_id": so_id, "owner_id": owner_id}
             )
-    return _row_to_so(header, lines, allocs)
+    return row_to_sales_order(header, lines, allocs)
 
 
 def list_sales_orders(
@@ -91,7 +91,7 @@ def list_sales_orders(
                     allocs = _select_allocations_query(
                         cur, params={"sales_order_id": so_id_str, "owner_id": owner_id}
                     )
-                items.append(_row_to_so(row, lines, allocs))
+                items.append(row_to_sales_order(row, lines, allocs))
 
     return {"items": items, "next_cursor": next_cursor}
 

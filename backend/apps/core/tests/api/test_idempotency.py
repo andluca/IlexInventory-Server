@@ -19,6 +19,9 @@ import itertools
 import json
 import os
 import types
+from datetime import datetime, timezone
+from decimal import Decimal
+from uuid import uuid4
 
 import psycopg
 from rest_framework.renderers import JSONRenderer
@@ -161,6 +164,51 @@ def test_idempotent_missing_header_returns_400():
     body = _render(response)
     assert body["error"] == "ValidationError"
     assert "Idempotency-Key" in body["detail"]
+    _clean_idempotency_keys()
+
+
+def test_idempotent_caches_response_with_decimal_and_datetime_body():
+    """Regression for ILEX-016 §1.3 — body containing Decimal/datetime/UUID
+    must round-trip through the cache without raising TypeError. Before the
+    fix, json.dumps(response.data) raised silently in `except psycopg.Error`,
+    leaving the cache empty for the very endpoints that need idempotency.
+    """
+    _call_counter["count"] = 0
+    _clean_idempotency_keys()
+    user = _fake_user()
+
+    rich_body = {
+        "id": uuid4(),
+        "amount": Decimal("123.4500"),
+        "created_at": datetime(2026, 5, 8, 12, 0, 0, tzinfo=timezone.utc),
+    }
+
+    class _RichView(APIView):
+        authentication_classes = []
+        permission_classes = []
+
+        @idempotent(endpoint="test.rich_body")
+        def post(self, request):
+            _call_counter["count"] += 1
+            return Response(rich_body, status=201)
+
+    factory = APIRequestFactory()
+    view = _RichView.as_view()
+
+    req1 = factory.post("/", HTTP_IDEMPOTENCY_KEY="rich-1")
+    force_authenticate(req1, user=user)
+    resp1 = view(req1)
+    assert resp1.status_code == 201
+    assert _call_counter["count"] == 1
+
+    # Second call with same key — cache must hit, handler must NOT run
+    req2 = factory.post("/", HTTP_IDEMPOTENCY_KEY="rich-1")
+    force_authenticate(req2, user=user)
+    resp2 = view(req2)
+    assert resp2.status_code == 201
+    assert _call_counter["count"] == 1, "Cache miss — Decimal/datetime body did not persist"
+    body2 = _render(resp2)
+    assert body2["amount"] == "123.4500"  # DRF's JSONRenderer preserves Decimal precision as string
     _clean_idempotency_keys()
 
 

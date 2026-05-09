@@ -167,6 +167,79 @@ def test_commit_fefo_ignores_expired_batch():
 # Insufficient on-hand → 422-mappable error; no allocations written
 # ---------------------------------------------------------------------------
 
+def test_commit_fefo_two_lines_same_product_split_across_batch():
+    """Regression for ILEX-016 §1.1.
+
+    Two SO lines targeting the same product must share the batch's on_hand
+    cumulatively. With on_hand=12 and two lines each requesting 7 (total 14),
+    the second line must see only 5 remaining, not 12 — i.e. it must raise
+    InsufficientStock. Before the fix, both lines saw the original 12 and
+    the SO committed by allocating 7+7=14 against a batch with only 12 units.
+    """
+    owner_id = 9211
+    seed_user(owner_id)
+    product_id = seed_product(owner_id)
+    seed_batch(owner_id, product_id, quantity="12.0000", unit_cost="1.0000")
+
+    so = create_sales_order_draft(
+        owner_id=owner_id,
+        customer_name="Two-line cumulative",
+        customer_contact=None,
+        lines=[
+            {"product_id": product_id, "quantity": Decimal("7.0000"), "sell_price": Decimal("5.0000")},
+            {"product_id": product_id, "quantity": Decimal("7.0000"), "sell_price": Decimal("5.0000")},
+        ],
+    )
+
+    with pytest.raises(InsufficientStock) as exc_info:
+        commit_sales_order(owner_id=owner_id, so_id=so["id"])
+
+    shortfall = exc_info.value.fields["shortfall"]
+    assert shortfall["product_id"] == product_id
+    # Line 2 requires 7. After line 1 already took 7 of the 12-unit batch,
+    # only 5 remain for line 2 — which is the available figure reported.
+    # Pre-fix, the second line also saw on_hand=12 and the SO committed
+    # by allocating 7+7=14 against a batch with only 12 (silent ledger bug).
+    assert Decimal(shortfall["available"]) == Decimal("5.0000")
+
+
+def test_commit_fefo_two_lines_same_product_within_capacity_succeeds():
+    """Two SO lines, same product, demand sums to less than on-hand — both allocated.
+
+    Companion to the regression above: the cumulative tracking must not
+    over-trigger InsufficientStock when capacity is sufficient.
+    """
+    owner_id = 9212
+    seed_user(owner_id)
+    product_id = seed_product(owner_id)
+    seed_batch(owner_id, product_id, quantity="20.0000", unit_cost="1.0000")
+
+    so = create_sales_order_draft(
+        owner_id=owner_id,
+        customer_name="Two-line under capacity",
+        customer_contact=None,
+        lines=[
+            {"product_id": product_id, "quantity": Decimal("7.0000"), "sell_price": Decimal("5.0000")},
+            {"product_id": product_id, "quantity": Decimal("7.0000"), "sell_price": Decimal("5.0000")},
+        ],
+    )
+
+    result = commit_sales_order(owner_id=owner_id, so_id=so["id"])
+    assert result["status"] == "committed"
+
+    # Both lines fully allocated (14 total)
+    with psycopg.connect(_DB_URL) as conn:
+        total_allocated = conn.execute(
+            """
+            SELECT COALESCE(SUM(sa.allocated_quantity), 0) FROM sale_allocations sa
+            JOIN sales_order_lines sol ON sol.id = sa.sales_order_line_id
+            WHERE sol.sales_order_id = %s
+            """,
+            (so["id"],),
+        ).fetchone()[0]
+    assert Decimal(str(total_allocated)) == Decimal("14.0000")
+
+
 def test_commit_insufficient_stock_raises_and_no_writes():
     """InsufficientStock (422) — no allocations or movements written on failure."""
     owner_id = 9205

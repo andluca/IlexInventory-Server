@@ -19,7 +19,7 @@ import psycopg
 import psycopg.errors
 from django.conf import settings
 
-from apps.inventory.queries.batches import list_eligible_for_fefo
+from apps.inventory.queries.batches import list_eligible_for_fefo, select_batch_by_id as select_batch_with_on_hand
 from apps.inventory.queries.movements import insert_movement
 from apps.sales.errors import (
     InsufficientStock,
@@ -49,6 +49,7 @@ from apps.sales.queries.sales_orders import (
     set_sales_order_voided,
     update_sales_order_header,
 )
+from apps.sales._assemble import row_to_sales_order
 from apps.sales.types import (
     ExplicitAllocation,
     NewSaleLine,
@@ -67,43 +68,6 @@ def _connect() -> psycopg.Connection:
     return psycopg.connect(settings.DATABASE_URL)
 
 
-def _row_to_so(header: dict, lines: list[dict], allocations: list[dict]) -> SalesOrderRow:
-    """Assemble a SalesOrderRow from header + lines + allocations dicts."""
-    h = dict(header)
-    if "id" in h and not isinstance(h["id"], str):
-        h["id"] = str(h["id"])
-
-    converted_lines = []
-    for ln in lines:
-        ln = dict(ln)
-        for key in ("id", "sales_order_id", "product_id"):
-            if key in ln and ln[key] is not None and not isinstance(ln[key], str):
-                ln[key] = str(ln[key])
-        converted_lines.append(ln)
-
-    converted_allocs = []
-    for alloc in allocations:
-        alloc = dict(alloc)
-        for key in ("id", "sales_order_line_id", "batch_id"):
-            if key in alloc and alloc[key] is not None and not isinstance(alloc[key], str):
-                alloc[key] = str(alloc[key])
-        converted_allocs.append(alloc)
-
-    return {
-        "id": h["id"],
-        "owner_id": h["owner_id"],
-        "customer_name": h["customer_name"],
-        "customer_contact": h.get("customer_contact"),
-        "status": h["status"],
-        "committed_at": h.get("committed_at"),
-        "voided_at": h.get("voided_at"),
-        "created_at": h["created_at"],
-        "updated_at": h["updated_at"],
-        "lines": converted_lines,
-        "allocations": converted_allocs,
-    }
-
-
 def _load_so_with_lines(cur, *, owner_id: int, so_id: str) -> SalesOrderRow | None:
     """Read header + lines + allocations for a SO. Returns None on miss/cross-owner."""
     header = select_sales_order_by_id(
@@ -117,7 +81,7 @@ def _load_so_with_lines(cur, *, owner_id: int, so_id: str) -> SalesOrderRow | No
     allocations = select_allocations_for_sales_order(
         cur, params={"sales_order_id": so_id, "owner_id": owner_id}
     )
-    return _row_to_so(header, lines, allocations)
+    return row_to_sales_order(header, lines, allocations)
 
 
 # ---------------------------------------------------------------------------
@@ -135,8 +99,16 @@ def _fefo_walk(
 
     Returns a list of allocation dicts: {line_id, batch_id, batch, quantity}.
     Locks eligible batch rows FOR UPDATE (via list_eligible_for_fefo).
+
+    Cumulative-correctness (ILEX-016 §1.1): two SO lines that target the same
+    product must not double-allocate the same batch. Each line's greedy take
+    subtracts from the running `batch_usage` budget for that batch, computed
+    across all earlier lines of this same walk. The DB has no on-hand CHECK
+    on stock_movements, so this Python-side accumulator is the only thing
+    preventing a single committed SO from driving on_hand negative.
     """
     planned: list[dict] = []
+    batch_usage: dict[str, Decimal] = {}
 
     for line in lines:
         product_id = str(line["product_id"])
@@ -151,25 +123,41 @@ def _fefo_walk(
         for batch in batches:
             if remaining <= Decimal("0"):
                 break
+            batch_id = str(batch["id"])
             on_hand = Decimal(str(batch["on_hand"]))
-            take = min(on_hand, remaining)
+            already_planned = batch_usage.get(batch_id, Decimal("0"))
+            available = on_hand - already_planned
+            if available <= Decimal("0"):
+                continue
+            take = min(available, remaining)
             planned.append({
                 "line_id": line_id,
-                "batch_id": str(batch["id"]),
+                "batch_id": batch_id,
                 "batch": batch,
                 "quantity": take,
             })
+            batch_usage[batch_id] = already_planned + take
             remaining -= take
 
         if remaining > Decimal("0"):
-            available = required - remaining
+            available_for_product = sum(
+                (
+                    max(
+                        Decimal(str(b["on_hand"])) - batch_usage.get(str(b["id"]), Decimal("0")),
+                        Decimal("0"),
+                    )
+                    for b in batches
+                ),
+                Decimal("0"),
+            )
+            allocated_so_far = required - remaining
             raise InsufficientStock(
                 detail="Insufficient stock for FEFO allocation.",
                 fields={
                     "shortfall": {
                         "product_id": product_id,
                         "required": str(required),
-                        "available": str(available),
+                        "available": str(allocated_so_far + available_for_product),
                     }
                 },
             )
@@ -216,24 +204,14 @@ def _validate_explicit_allocations(
             )
         line = line_by_id[line_id]
 
-        # Fetch batch for validation
-        cur.execute(
-            """
-            SELECT b.*, COALESCE(v.on_hand, 0) AS on_hand
-              FROM batches b
-              LEFT JOIN v_stock_by_batch v
-                     ON v.batch_id = b.id AND v.owner_id = b.owner_id
-             WHERE b.id = %s AND b.owner_id = %s
-            """,
-            (batch_id, owner_id),
+        # Read batch + on-hand via the inventory query layer (no raw SQL in services).
+        batch = select_batch_with_on_hand(
+            cur, params={"id": batch_id, "owner_id": owner_id}
         )
-        cols_desc = [d.name for d in cur.description]
-        row = cur.fetchone()
-        if row is None:
+        if batch is None:
             raise InvalidAllocation(
                 detail=f"batch_id {batch_id} not found for this owner."
             )
-        batch = dict(zip(cols_desc, row))
 
         if str(batch["product_id"]) != str(line["product_id"]):
             raise InvalidAllocation(
@@ -346,7 +324,7 @@ def create_sales_order_draft(
             conn.rollback()
             raise
 
-    return _row_to_so(header, inserted_lines, [])
+    return row_to_sales_order(header, inserted_lines, [])
 
 
 def update_sales_order_draft(
@@ -437,7 +415,7 @@ def update_sales_order_draft(
             conn.rollback()
             raise
 
-    return _row_to_so(header, inserted_lines, allocations)
+    return row_to_sales_order(header, inserted_lines, allocations)
 
 
 def delete_sales_order_draft(
@@ -519,7 +497,7 @@ def list_sales_orders_for_owner(
                         cur,
                         params={"sales_order_id": so_id_str, "owner_id": owner_id},
                     )
-                items.append(_row_to_so(row, lines, allocs))
+                items.append(row_to_sales_order(row, lines, allocs))
 
     return {"items": items, "next_cursor": next_cursor}
 
@@ -604,7 +582,7 @@ def commit_sales_order(
             conn.rollback()
             raise
 
-    return _row_to_so(updated_header, lines, inserted_allocs)
+    return row_to_sales_order(updated_header, lines, inserted_allocs)
 
 
 def void_sales_order(
@@ -642,7 +620,7 @@ def void_sales_order(
                         cur, params={"sales_order_id": so_id, "owner_id": owner_id}
                     )
                     conn.rollback()
-                    return _row_to_so(header, lines, allocs)
+                    return row_to_sales_order(header, lines, allocs)
 
                 allocs = select_allocations_for_sales_order(
                     cur, params={"sales_order_id": so_id, "owner_id": owner_id}
@@ -677,7 +655,7 @@ def void_sales_order(
             conn.rollback()
             raise
 
-    return _row_to_so(updated_header, lines, allocs)
+    return row_to_sales_order(updated_header, lines, allocs)
 
 
 def preview_so_allocations(

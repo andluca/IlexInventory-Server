@@ -22,6 +22,7 @@ from rest_framework.views import APIView
 from apps.core.csv_export import format_datetime, format_decimal, stream_csv
 from apps.core.errors import DomainError, to_response
 from apps.core.idempotency import idempotent
+from apps.inventory.errors import BatchNotFound
 from apps.inventory.selectors import (
     batch_by_id,
     list_batches,
@@ -139,7 +140,8 @@ class BatchDetailApi(APIView):
         owner_id = request.user.id
         batch = batch_by_id(owner_id=owner_id, batch_id=batch_id)
         if batch is None:
-            return Response({}, status=status.HTTP_404_NOT_FOUND)
+            body, http_status = to_response(BatchNotFound(detail=f"Batch {batch_id} not found."))
+            return Response(body, status=http_status)
         return Response(BatchResponse(batch).data)
 
     @extend_schema(
@@ -172,7 +174,15 @@ class BatchDetailApi(APIView):
 
 
 class BatchMovementsApi(APIView):
-    """POST /batches/{id}/movements — record an adjustment or write-off."""
+    """POST /batches/{id}/movements — record an adjustment or write-off.
+
+    SPEC §2.6 mandates `Idempotency-Key` for write_off (a stock-debiting
+    operation that is destructive on retry). Adjustment is a free-form audit
+    correction and does not require the header. The view dispatches by `kind`:
+    write_off goes through the `@idempotent`-decorated path, adjustment runs
+    directly. Pre-ILEX-016, neither was decorated and a retried write_off
+    could double-debit stock.
+    """
 
     permission_classes = [IsAuthenticated]
 
@@ -183,13 +193,22 @@ class BatchMovementsApi(APIView):
         summary="Record a stock movement",
     )
     def post(self, request: Request, batch_id: str) -> Response:
-        """POST /batches/{id}/movements — record a movement (adjustment or write_off)."""
         owner_id = request.user.id
         ser = MovementCreateRequest(data=request.data)
         if not ser.is_valid():
             return Response({"error": "ValidationError", "fields": ser.errors}, status=400)
 
         v = ser.validated_data
+        if v["kind"] == "write_off":
+            return self._post_write_off(request, batch_id, v, owner_id)
+        return self._record(batch_id, v, owner_id)
+
+    @idempotent("inventory.write_off")
+    def _post_write_off(self, request: Request, batch_id: str, v: dict, owner_id: int) -> Response:
+        """Idempotent path for `kind == "write_off"`. Wraps `_record`."""
+        return self._record(batch_id, v, owner_id)
+
+    def _record(self, batch_id: str, v: dict, owner_id: int) -> Response:
         try:
             movement = record_movement(
                 owner_id=owner_id,
@@ -353,7 +372,8 @@ class BatchRecallReportApi(APIView):
         # Pre-check: batch must exist and belong to this owner (404 otherwise).
         batch = batch_by_id(owner_id=owner_id, batch_id=batch_id)
         if batch is None:
-            return Response({}, status=status.HTTP_404_NOT_FOUND)
+            body, http_status = to_response(BatchNotFound(detail=f"Batch {batch_id} not found."))
+            return Response(body, status=http_status)
 
         _CSV_HEADER = [
             "sale_order_id", "customer_name", "customer_contact",

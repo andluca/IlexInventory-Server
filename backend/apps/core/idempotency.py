@@ -29,10 +29,13 @@ from typing import Any
 
 import psycopg
 from django.conf import settings
+from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.core.errors import ValidationError, to_response
+
+_JSON_RENDERER = JSONRenderer()
 
 
 def idempotent(endpoint: str) -> Callable:
@@ -110,15 +113,14 @@ def _store_cache(
     endpoint: str,
     response: Response,
 ) -> None:
-    """Persist (status, body) in idempotency_keys with ON CONFLICT DO NOTHING."""
-    # Render the response to get the JSON body before storage.
-    try:
-        if hasattr(response, "data"):
-            body = response.data
-        else:
-            body = {}
-    except Exception:  # noqa: BLE001
-        body = {}
+    """Persist (status, body) in idempotency_keys with ON CONFLICT DO NOTHING.
+
+    The body is taken from the **rendered** response so DRF's renderer has
+    already serialized Decimal/datetime/UUID into strings. Caching
+    `response.data` directly raises TypeError on those types and was a
+    silent no-op before — see ILEX-016 §1.3.
+    """
+    body_text = _rendered_body_text(response)
 
     try:
         with psycopg.connect(db_url, autocommit=True) as conn:
@@ -127,7 +129,7 @@ def _store_cache(
                     """
                     INSERT INTO idempotency_keys
                            (owner_id, key, endpoint, response_status, response_body)
-                    VALUES (%s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s::jsonb)
                     ON CONFLICT (owner_id, key, endpoint) DO NOTHING
                     """,
                     (
@@ -135,10 +137,32 @@ def _store_cache(
                         key,
                         endpoint,
                         response.status_code,
-                        json.dumps(body),
+                        body_text,
                     ),
                 )
     except psycopg.Error:
         # Storage failure is non-fatal: the view already ran successfully.
         # The next retry will re-execute the handler (cache miss again).
         pass
+
+
+def _rendered_body_text(response: Response) -> str:
+    """Return the response body as JSON text, using DRF's renderer when needed.
+
+    DRF's `Response.data` may contain Decimal/datetime/UUID instances; the
+    standard `json.dumps` raises TypeError on those. Calling `render()` runs
+    the configured renderer (typically `JSONRenderer`) which knows how to
+    serialize them. For a 204 / no-data response, return "{}" so the column
+    (typed `jsonb`) accepts it.
+    """
+    if not hasattr(response, "data") or response.data is None:
+        return "{}"
+    if not getattr(response, "is_rendered", False):
+        try:
+            response.accepted_renderer = response.accepted_renderer or _JSON_RENDERER
+            response.accepted_media_type = "application/json"
+            response.renderer_context = response.renderer_context or {}
+            response.render()
+        except Exception:  # noqa: BLE001 — fall back to permissive serialization
+            return json.dumps(response.data, default=str)
+    return response.content.decode("utf-8")

@@ -302,7 +302,7 @@
         "/api/v1/batches/{batch_id}/movements": {
             "post": {
                 "operationId": "batches_movements_create",
-                "description": "POST /batches/{id}/movements — record a movement (adjustment or write_off).",
+                "description": "POST /batches/{id}/movements — record an adjustment or write-off.\n\nSPEC §2.6 mandates `Idempotency-Key` for write_off (a stock-debiting\noperation that is destructive on retry). Adjustment is a free-form audit\ncorrection and does not require the header. The view dispatches by `kind`:\nwrite_off goes through the `@idempotent`-decorated path, adjustment runs\ndirectly. Pre-ILEX-016, neither was decorated and a retried write_off\ncould double-debit stock.",
                 "summary": "Record a stock movement",
                 "parameters": [
                     {

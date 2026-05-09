@@ -21,7 +21,12 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options) -> None:  # type: ignore[override]
         try:
-            import settings.prod  # noqa: F401 — side-effect: validates all required vars at import
+            # break cycle: settings.prod's module body raises ImproperlyConfigured
+            # on missing required env vars at import time. Hoisting this to the
+            # module top would crash the management subsystem before it can run
+            # any *other* command (e.g. `migrate_sql`) on a misconfigured env.
+            # The import is intentionally side-effectful and gated on `handle`.
+            import settings.prod  # noqa: F401
         except ImproperlyConfigured as exc:
             self.stderr.write(f"check-env: FATAL — {exc}")
             sys.exit(1)

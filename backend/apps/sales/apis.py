@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 
 from apps.core.errors import DomainError, to_response
 from apps.core.idempotency import idempotent
+from apps.sales.errors import SalesOrderNotFound
 from apps.sales.selectors import list_sales_orders, sales_order_by_id
 from apps.sales.serializers import (
     SalesOrderCommitRequest,
@@ -131,7 +132,8 @@ class SalesOrderDetailApi(APIView):
         owner_id = request.user.id
         so = sales_order_by_id(owner_id=owner_id, so_id=so_id)
         if so is None:
-            return Response({}, status=status.HTTP_404_NOT_FOUND)
+            body, http_status = to_response(SalesOrderNotFound(detail=f"Sales order {so_id} not found."))
+            return Response(body, status=http_status)
         return Response(SalesOrderResponse(so).data)
 
     @extend_schema(
