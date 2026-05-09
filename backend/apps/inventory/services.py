@@ -17,7 +17,8 @@ from typing import Any
 
 import psycopg
 import psycopg.errors
-from django.conf import settings
+
+from apps.core.db import connect as _connect
 
 from apps.inventory.errors import (
     BatchExists,
@@ -42,11 +43,6 @@ from apps.inventory.types import BatchRow, MovementRow, ReceiveLine
 
 # Kinds that callers of record_movement (the public endpoint) may request.
 _PUBLIC_MOVEMENT_KINDS = {"adjustment", "write_off"}
-
-
-def _connect() -> psycopg.Connection:
-    """Open a raw psycopg connection to the configured DATABASE_URL."""
-    return psycopg.connect(settings.DATABASE_URL)
 
 
 def _row_to_batch(row: dict) -> BatchRow:

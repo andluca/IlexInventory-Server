@@ -9,13 +9,8 @@ Rules:
 
 from __future__ import annotations
 
+from apps.core.db import row_to_dict as _row_to_dict
 from apps.core.owner_scope import scoped
-
-
-def _row_to_dict(cur, row) -> dict:
-    """Convert a cursor row to a dict using cursor.description column names."""
-    cols = [d.name for d in cur.description]
-    return dict(zip(cols, row))
 
 
 @scoped

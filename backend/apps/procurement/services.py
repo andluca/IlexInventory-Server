@@ -15,7 +15,8 @@ from uuid import UUID
 
 import psycopg
 import psycopg.errors
-from django.conf import settings
+
+from apps.core.db import connect as _connect
 
 from apps.inventory.services import create_receipt_batches
 from apps.procurement.errors import (
@@ -47,11 +48,6 @@ from apps.procurement.types import NewLine, PurchaseOrderRow, ReceiveLineMeta
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-
-
-def _connect() -> psycopg.Connection:
-    """Open a raw psycopg connection to the configured DATABASE_URL."""
-    return psycopg.connect(settings.DATABASE_URL)
 
 
 def _row_to_po(header: dict, lines: list[dict]) -> PurchaseOrderRow:

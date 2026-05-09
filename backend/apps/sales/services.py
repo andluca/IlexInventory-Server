@@ -17,7 +17,8 @@ from typing import Any
 
 import psycopg
 import psycopg.errors
-from django.conf import settings
+
+from apps.core.db import connect as _connect
 
 from apps.inventory.queries.batches import list_eligible_for_fefo, select_batch_by_id as select_batch_with_on_hand
 from apps.inventory.queries.movements import insert_movement
@@ -61,11 +62,6 @@ from apps.sales.types import (
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-
-
-def _connect() -> psycopg.Connection:
-    """Open a raw psycopg connection to the configured DATABASE_URL."""
-    return psycopg.connect(settings.DATABASE_URL)
 
 
 def _load_so_with_lines(cur, *, owner_id: int, so_id: str) -> SalesOrderRow | None:
@@ -165,86 +161,64 @@ def _fefo_walk(
     return planned
 
 
-def _validate_explicit_allocations(
-    cur,
-    *,
-    owner_id: int,
-    lines: list[dict],
-    allocations: list[ExplicitAllocation],
-) -> list[dict]:
-    """Validate explicit allocations (D11 admin override).
+def _index_lines_by_id(lines: list[dict]) -> dict[str, dict]:
+    """Project a list of SO lines into a dict keyed by stringified line id."""
+    return {str(ln["id"]): ln for ln in lines}
 
-    Checks:
-    - Each batch exists for owner.
-    - batch.product_id == line.product_id.
-    - Batch not recalled; not expired.
-    - Per-line SUM(quantity) == line.quantity.
-    - Batch on-hand >= cumulative allocated per batch.
 
-    Returns a list of planned allocation dicts (same shape as _fefo_walk).
-    Raises InvalidAllocation on any failure.
-    """
-    line_by_id = {str(ln["id"]): ln for ln in lines}
+def _resolve_line_for_allocation(
+    line_by_id: dict[str, dict], line_id: str
+) -> dict:
+    """Look up the SO line a given allocation references; raise InvalidAllocation."""
+    if line_id not in line_by_id:
+        raise InvalidAllocation(detail=f"line_id {line_id} does not belong to this SO.")
+    return line_by_id[line_id]
 
-    # Group allocations by line_id for sum check
-    line_sums: dict[str, Decimal] = {}
-    planned: list[dict] = []
 
-    # Track cumulative per-batch usage
-    batch_usage: dict[str, Decimal] = {}
+def _load_batch_for_explicit_allocation(cur, *, owner_id: int, batch_id: str) -> dict:
+    """Read batch + on_hand via inventory's query layer; raise on miss."""
+    batch = select_batch_with_on_hand(cur, params={"id": batch_id, "owner_id": owner_id})
+    if batch is None:
+        raise InvalidAllocation(detail=f"batch_id {batch_id} not found for this owner.")
+    return batch
 
-    for alloc in allocations:
-        line_id = str(alloc["line_id"])
-        batch_id = str(alloc["batch_id"])
-        qty = Decimal(str(alloc["quantity"]))
 
-        if line_id not in line_by_id:
-            raise InvalidAllocation(
-                detail=f"line_id {line_id} does not belong to this SO."
-            )
-        line = line_by_id[line_id]
-
-        # Read batch + on-hand via the inventory query layer (no raw SQL in services).
-        batch = select_batch_with_on_hand(
-            cur, params={"id": batch_id, "owner_id": owner_id}
+def _check_batch_eligible_for_line(batch: dict, line: dict) -> None:
+    """Reject mismatched product, recalled batch, or expired batch."""
+    batch_id = str(batch["id"])
+    line_id = str(line["id"])
+    if str(batch["product_id"]) != str(line["product_id"]):
+        raise InvalidAllocation(
+            detail=f"batch {batch_id} belongs to a different product than line {line_id}."
         )
-        if batch is None:
-            raise InvalidAllocation(
-                detail=f"batch_id {batch_id} not found for this owner."
-            )
+    if batch["is_recalled"]:
+        raise InvalidAllocation(
+            detail=f"batch {batch_id} is recalled and cannot be allocated."
+        )
+    today = datetime.date.today()
+    if batch["expiration_date"] is not None and batch["expiration_date"] < today:
+        raise InvalidAllocation(
+            detail=f"batch {batch_id} is expired and cannot be allocated."
+        )
 
-        if str(batch["product_id"]) != str(line["product_id"]):
-            raise InvalidAllocation(
-                detail=f"batch {batch_id} belongs to a different product than line {line_id}."
-            )
 
-        if batch["is_recalled"]:
-            raise InvalidAllocation(
-                detail=f"batch {batch_id} is recalled and cannot be allocated."
-            )
+def _track_per_batch_usage(
+    batch_usage: dict[str, Decimal], batch: dict, qty: Decimal
+) -> None:
+    """Add qty to the cumulative usage for this batch; raise if it exceeds on_hand."""
+    batch_id = str(batch["id"])
+    batch_usage[batch_id] = batch_usage.get(batch_id, Decimal("0")) + qty
+    if batch_usage[batch_id] > Decimal(str(batch["on_hand"])):
+        raise InvalidAllocation(
+            detail=f"batch {batch_id} has insufficient on-hand for requested allocation."
+        )
 
-        today = datetime.date.today()
-        if batch["expiration_date"] is not None and batch["expiration_date"] < today:
-            raise InvalidAllocation(
-                detail=f"batch {batch_id} is expired and cannot be allocated."
-            )
 
-        batch_usage[batch_id] = batch_usage.get(batch_id, Decimal("0")) + qty
-        on_hand = Decimal(str(batch["on_hand"]))
-        if batch_usage[batch_id] > on_hand:
-            raise InvalidAllocation(
-                detail=f"batch {batch_id} has insufficient on-hand for requested allocation."
-            )
-
-        line_sums[line_id] = line_sums.get(line_id, Decimal("0")) + qty
-        planned.append({
-            "line_id": line_id,
-            "batch_id": batch_id,
-            "batch": batch,
-            "quantity": qty,
-        })
-
-    # Validate per-line sum == line.quantity
+def _check_per_line_sums(
+    line_sums: dict[str, Decimal], line_by_id: dict[str, dict]
+) -> None:
+    """Verify every line is fully covered: each provided sum matches the line.quantity,
+    and every line in the SO has at least one allocation."""
     for line_id, total_alloc in line_sums.items():
         required = Decimal(str(line_by_id[line_id]["quantity"]))
         if total_alloc != required:
@@ -254,15 +228,52 @@ def _validate_explicit_allocations(
                     f"does not match line quantity {required}."
                 )
             )
-
-    # Check all lines are accounted for
-    for line in lines:
+    for line in line_by_id.values():
         line_id = str(line["id"])
         if line_id not in line_sums:
-            raise InvalidAllocation(
-                detail=f"line {line_id} has no allocation provided."
-            )
+            raise InvalidAllocation(detail=f"line {line_id} has no allocation provided.")
 
+
+def _validate_explicit_allocations(
+    cur,
+    *,
+    owner_id: int,
+    lines: list[dict],
+    allocations: list[ExplicitAllocation],
+) -> list[dict]:
+    """Validate explicit allocations (D11 admin override).
+
+    Checks every allocation against (1) line existence, (2) batch existence,
+    (3) batch eligibility (product / recall / expiry), (4) cumulative on-hand,
+    and finally (5) per-line sum equality. Raises InvalidAllocation on any
+    failure. Returns the planned allocation list on success.
+
+    Decomposed in ILEX-016 §2.2; see the helpers above for individual checks.
+    """
+    line_by_id = _index_lines_by_id(lines)
+    line_sums: dict[str, Decimal] = {}
+    batch_usage: dict[str, Decimal] = {}
+    planned: list[dict] = []
+
+    for alloc in allocations:
+        line_id = str(alloc["line_id"])
+        batch_id = str(alloc["batch_id"])
+        qty = Decimal(str(alloc["quantity"]))
+
+        line = _resolve_line_for_allocation(line_by_id, line_id)
+        batch = _load_batch_for_explicit_allocation(cur, owner_id=owner_id, batch_id=batch_id)
+        _check_batch_eligible_for_line(batch, line)
+        _track_per_batch_usage(batch_usage, batch, qty)
+
+        line_sums[line_id] = line_sums.get(line_id, Decimal("0")) + qty
+        planned.append({
+            "line_id": line_id,
+            "batch_id": batch_id,
+            "batch": batch,
+            "quantity": qty,
+        })
+
+    _check_per_line_sums(line_sums, line_by_id)
     return planned
 
 

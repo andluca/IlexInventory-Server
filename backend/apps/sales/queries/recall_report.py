@@ -13,12 +13,6 @@ from typing import Generator
 from apps.core.owner_scope import scoped
 
 
-def _row_to_dict(cur, row) -> dict:
-    """Convert a cursor row to a dict using cursor.description column names."""
-    cols = [d.name for d in cur.description]
-    return dict(zip(cols, row))
-
-
 @scoped
 def select_recall_report_for_batch(cur, *, params: dict) -> tuple[list[dict], int]:
     """SELECT recall report rows for a batch_id, offset-paginated.

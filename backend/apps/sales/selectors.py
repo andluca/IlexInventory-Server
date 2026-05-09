@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Generator
 
-import psycopg
-from django.conf import settings
+
+from apps.core.db import connect as _connect
 
 from apps.sales.queries.recall_report import (
     select_recall_report_for_batch as _select_recall_report_query,
@@ -28,10 +28,6 @@ from apps.sales.queries.sales_orders import (
 )
 from apps.sales._assemble import row_to_sales_order
 from apps.sales.types import SalesOrderRow
-
-
-def _connect() -> psycopg.Connection:
-    return psycopg.connect(settings.DATABASE_URL)
 
 
 def sales_order_by_id(*, owner_id: int, so_id: str) -> SalesOrderRow | None:

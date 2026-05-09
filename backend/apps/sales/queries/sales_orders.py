@@ -12,14 +12,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
+from apps.core.db import row_to_dict as _row_to_dict
 from apps.core.owner_scope import scoped
 from apps.core.pagination import decode_cursor, encode_cursor
-
-
-def _row_to_dict(cur, row) -> dict:
-    """Convert a cursor row to a dict using cursor.description column names."""
-    cols = [d.name for d in cur.description]
-    return dict(zip(cols, row))
 
 
 @scoped

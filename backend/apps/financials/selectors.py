@@ -15,8 +15,8 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Generator
 
-import psycopg
-from django.conf import settings
+
+from apps.core.db import connect as _connect
 
 from apps.core.pagination import decode_decimal_cursor, encode_decimal_cursor
 from apps.financials.queries.margin import (
@@ -24,10 +24,6 @@ from apps.financials.queries.margin import (
     select_margin_by_product,
 )
 from apps.financials.types import Dashboard, DashboardTotals, MarginRow
-
-
-def _connect() -> psycopg.Connection:
-    return psycopg.connect(settings.DATABASE_URL)
 
 
 def _compute_margin_pct(revenue: Decimal, cogs: Decimal) -> Decimal | None:

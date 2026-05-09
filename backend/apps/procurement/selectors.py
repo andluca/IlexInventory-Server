@@ -8,8 +8,8 @@ queries layer to build the response shapes needed by the API layer.
 from __future__ import annotations
 
 
-import psycopg
-from django.conf import settings
+
+from apps.core.db import connect as _connect
 
 from apps.procurement.queries.purchase_order_lines import (
     select_lines_for_purchase_order,
@@ -19,10 +19,6 @@ from apps.procurement.queries.purchase_orders import (
     select_purchase_order_by_id,
 )
 from apps.procurement.types import PurchaseOrderRow
-
-
-def _connect() -> psycopg.Connection:
-    return psycopg.connect(settings.DATABASE_URL)
 
 
 def _row_to_po(header: dict, lines: list[dict]) -> PurchaseOrderRow:

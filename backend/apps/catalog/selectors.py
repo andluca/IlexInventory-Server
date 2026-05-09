@@ -6,17 +6,13 @@ transactions (reads are non-mutating). They return plain dicts or None.
 
 from __future__ import annotations
 
-import psycopg
-from django.conf import settings
+
+from apps.core.db import connect as _connect
 
 from apps.catalog.queries.products import (
     list_products as _list_products,
     select_product_by_id,
 )
-
-
-def _connect() -> psycopg.Connection:
-    return psycopg.connect(settings.DATABASE_URL)
 
 
 def list_products(

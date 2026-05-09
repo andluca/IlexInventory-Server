@@ -16,7 +16,8 @@ from uuid import UUID
 
 import psycopg
 import psycopg.errors
-from django.conf import settings
+
+from apps.core.db import connect as _connect
 
 from apps.catalog.errors import (
     DuplicateSKU,
@@ -40,11 +41,6 @@ _VALID_BASE_UNITS = frozenset({"g", "ml", "unit"})
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
-
-
-def _connect() -> psycopg.Connection:
-    """Open a raw psycopg connection to the configured DATABASE_URL."""
-    return psycopg.connect(settings.DATABASE_URL)
 
 
 def _row_to_product(row: dict) -> ProductRow:

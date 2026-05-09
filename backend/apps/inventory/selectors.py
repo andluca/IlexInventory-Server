@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Generator
 
-import psycopg
-from django.conf import settings
+
+from apps.core.db import connect as _connect
 
 from apps.inventory.queries.batches import (
     list_batches as _list_batches_query,
@@ -21,10 +21,6 @@ from apps.inventory.queries.movements import (
     stream_movements as _stream_movements_query,
 )
 from apps.inventory.types import BatchRow
-
-
-def _connect() -> psycopg.Connection:
-    return psycopg.connect(settings.DATABASE_URL)
 
 
 def list_batches(
