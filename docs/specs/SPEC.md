@@ -434,7 +434,7 @@ Phase-specific:
 | 10 | CSV exports + indexes | `0007_indexes.sql` (FEFO index, audit index, cursor pagination indexes) + `?format=csv` content negotiation across supporting endpoints | pending | 9 |
 | 11 | OpenAPI + FE handoff | Regenerate `openapi.json`; FE consumes via `openapi-typescript`; smoke a few hooks; CI gate on regen drift | pending | 10 |
 | 12 | Agent (Phase 3) | Read-only role + allowlisted views; `/agent/chat` endpoint; OAuth proxy. **Out of v1 MVP** — spec'd for completeness | pending | 11 |
-| 13 | Deploy | Dockerfile, docker-compose for prod target (Fly.io / Railway / Render TBD), CI pipeline | pending | 11 |
+| 13 | Deploy | Dockerfile, docker-compose for prod target (Railway), CI pipeline | pending | 11 |
 
 ---
 

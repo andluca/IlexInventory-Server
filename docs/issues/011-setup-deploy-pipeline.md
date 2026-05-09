@@ -1,8 +1,8 @@
-> **Status:** ✅ Done — shipped in [`2b0e196`](../../commit/2b0e196) as `feat(deploy): Dockerfile + entrypoint + Fly + GitHub Actions CI (ILEX-011)`.
+> **Status:** ✅ Done — initial pipeline shipped in [`2b0e196`](../../commit/2b0e196); production target is **Railway** (cross-site cookie/CORS adjustments tracked in [`cb14c4e`](../../commit/cb14c4e)).
 
 # ILEX-011 Setup deploy pipeline (Docker, target host, CI)
 
-Production deployment surface: a multi-stage `Dockerfile` that builds a `gunicorn`-served BE image, an entrypoint that applies SQL migrations and fail-fast-validates env vars before booting, a prod-shape `docker-compose.prod.yml` (BE + Postgres 16) used by the smoke test, the `/docs` Swagger UI gated behind `OPENAPI_PUBLIC_DOCS`, a GitHub Actions CI workflow running every existing validation gate (`pytest`, `ruff`, `check_no_orm.sh`, `check_openapi_drift.sh`) against a real Postgres service, and Fly.io as the picked deploy target with `deploy/fly.toml` committed.
+Production deployment surface: a multi-stage `Dockerfile` that builds a `gunicorn`-served BE image, an entrypoint that applies SQL migrations and fail-fast-validates env vars before booting, a prod-shape `docker-compose.prod.yml` (BE + Postgres 16) used by the smoke test, the `/docs` Swagger UI gated behind `OPENAPI_PUBLIC_DOCS`, a GitHub Actions CI workflow running every existing validation gate (`pytest`, `ruff`, `check_no_orm.sh`, `check_openapi_drift.sh`) against a real Postgres service, and **Railway** as the deploy target — no platform-specific config file in the repo (Railway builds the Dockerfile and reads env vars from the dashboard).
 
 # Specification
 
@@ -48,7 +48,7 @@ smoke-health: OK — /api/v1/health returned 200 with {"status":"ok","checks":{"
 #### Migration failure on first boot
 * Migration file at `backend/migrations/00NN_*.sql` has invalid SQL.
 * Entrypoint runs `migrate_sql`; the management command rolls back the transaction, prints `error applying 00NN_*.sql: <psycopg error>` to stderr, exits 1 (existing behaviour at `backend/apps/core/management/commands/migrate_sql.py:84-89`).
-* Entrypoint propagates the non-zero exit; `gunicorn` is never started; the orchestrator (compose / Fly) marks the container unhealthy.
+* Entrypoint propagates the non-zero exit; `gunicorn` is never started; the orchestrator (compose / Railway) marks the container unhealthy.
 
 #### `/docs` exposure toggle
 * `OPENAPI_PUBLIC_DOCS=false` (the prod default per SPEC §2.9) → `GET /api/v1/docs` returns 404.
@@ -58,7 +58,7 @@ smoke-health: OK — /api/v1/health returned 200 with {"status":"ok","checks":{"
 ## Function: validate_required_env
 File: `backend/apps/core/management/commands/check_env.py`
 
-A management command (`python manage.py check_env`) that imports `settings.prod` under the hood and asserts every required env var is set, exiting non-zero with the first missing var name. The entrypoint script calls it before `migrate_sql`, giving operators a single canonical fail-fast path that is reused by the CI smoke job and by Fly.io's release command.
+A management command (`python manage.py check_env`) that imports `settings.prod` under the hood and asserts every required env var is set, exiting non-zero with the first missing var name. The entrypoint script calls it before `migrate_sql`, giving operators a single canonical fail-fast path that is reused by the CI smoke job and by every container start on Railway.
 
 ### Implementation
 * Required vars (must be present, any value): `DJANGO_SECRET_KEY`, `DATABASE_URL`, `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`.
@@ -116,7 +116,7 @@ Prod-shape compose stack used by the smoke test. Distinct from the existing `dep
 ### Services
 * `postgres` — `postgres:16`, named volume `ilex_pgdata`, healthcheck `pg_isready`, env from `.env.prod` (`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`).
 * `backend` — `build: { context: ., dockerfile: Dockerfile }`, depends_on `postgres: { condition: service_healthy }`, env_file `.env.prod`, ports `8000:8000`, restart `unless-stopped`. `DATABASE_URL` constructed to point at the compose `postgres` service hostname.
-* No nginx / reverse proxy in compose — Fly.io fronts TLS in production; smoke test hits `gunicorn` directly on port 8000.
+* No nginx / reverse proxy in compose — Railway's edge fronts TLS in production; smoke test hits `gunicorn` directly on port 8000.
 
 ## Lib: github_actions_ci
 File: `.github/workflows/ci.yml`
@@ -139,18 +139,17 @@ Single workflow `ci` with one job `validate` running every existing gate against
 ### Job: docker-smoke (separate, runs after validate)
 * Builds the image (`docker compose -f deploy/docker-compose.prod.yml build`), brings up the stack, runs `./scripts/smoke_health.sh`, tears the stack down on success or failure (`docker compose down -v` in an `if: always()` step).
 
-## Lib: fly_target
-File: `deploy/fly.toml`
+## Lib: railway_target
+File: none committed — Railway reads the `Dockerfile` and dashboard env vars.
 
-Fly.io platform config. Picked for: native Postgres add-on (Fly Postgres) eliminates a separate DB-host concern; release-command primitive matches our entrypoint shape (run `migrate_sql` once before traffic shifts); single-region (`iad`) matches the v1 single-tenant scope; free-tier-friendly for the take-home demo.
+Railway platform setup. Picked for: managed Postgres add-on auto-injects `DATABASE_URL` into the service env (no manual reference variable), Dockerfile-based deploys (no platform-specific build config to maintain), public HTTPS endpoint with TLS termination at the edge, hot replace on push.
 
-### Keys
-* `app = "ilex-inventory-server"`, `primary_region = "iad"`.
-* `[build] dockerfile = "Dockerfile"`.
-* `[deploy] release_command = "python manage.py migrate_sql"` — Fly runs this in a one-off VM with the prod env injected before swapping the live image. Belt-and-suspenders with the entrypoint's own migrate step (release command catches migration failures before the rollout starts).
-* `[http_service]` — `internal_port = 8000`, `force_https = true`, `auto_stop_machines = "stop"`, `auto_start_machines = true`.
-* `[[http_service.checks]]` — `path = "/api/v1/health"`, `interval = "10s"`, `timeout = "2s"`, `grace_period = "10s"`.
-* Secrets (set via `fly secrets set`, not in this file): `DJANGO_SECRET_KEY`, `DATABASE_URL` (auto-injected by `fly postgres attach`), `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, `OPENAPI_PUBLIC_DOCS`.
+### Configuration
+* **Build**: Railway detects the `Dockerfile` at the repo root and builds it on each push.
+* **Service env vars** (set in the Railway dashboard, not committed): `DJANGO_SECRET_KEY`, `ALLOWED_HOSTS` (the `*.up.railway.app` hostname), `CORS_ALLOWED_ORIGINS` (the FE origin), `OPENAPI_PUBLIC_DOCS`.
+* **Postgres add-on**: created in the dashboard; `DATABASE_URL` is auto-injected into the BE service env. No manual wiring.
+* **Migrations**: applied on every container start by the entrypoint (`python manage.py migrate_sql`). `migrate_sql` is idempotent (tracks applied filenames in `_sql_migrations`), so unchanged migrations are no-ops; failed migrations exit the container before `gunicorn` boots, so Railway marks the new revision unhealthy and keeps the previous one live.
+* **Healthcheck**: Railway probes the service URL; `GET /api/v1/health` returns `200 {"status":"ok",...}`.
 
 ## External Dependencies
 
@@ -159,14 +158,15 @@ Used for: production WSGI server (replaces `runserver` in containers).
 Commands: `gunicorn wsgi:application --bind 0.0.0.0:8000 --workers 3 --access-logfile - --error-logfile -`
 
 * New runtime dep added to `pyproject.toml` (project.dependencies).
-* `--workers 3` matches the `2 × CPU + 1` rule of thumb on Fly's shared-cpu-1x machines (1 vCPU). Tunable via `GUNICORN_WORKERS` env var.
+* `--workers 3` matches the `2 × CPU + 1` rule of thumb on a 1-vCPU container (Railway's default service size). Tunable via `GUNICORN_WORKERS` env var.
 
-### Fly.io
-Used for: production deploy target (single-region container hosting + managed Postgres).
-Commands: `fly deploy`, `fly postgres create`, `fly postgres attach`, `fly secrets set`
+### Railway
+Used for: production deploy target (container hosting + managed Postgres).
+Commands: `railway init`, `railway up`, `railway variables set …` (or use the dashboard).
 
-* Authenticated via `flyctl auth login` (operator) or `FLY_API_TOKEN` (CI; not wired in this issue — manual `fly deploy` for v1).
-* Release command (`migrate_sql`) is the only Fly-specific glue; the rest is plain Docker.
+* Authenticated via `railway login` (operator). Auto-deploys on push to `main` once the GitHub repo is connected; manual `railway up` for one-shot deploys from a clean checkout.
+* Migrations land via the container's `entrypoint.sh` on every start (Railway has no first-class release-command primitive; the entrypoint is the only "Railway-specific" glue and it's still platform-neutral).
+* Postgres add-on auto-injects `DATABASE_URL`; the rest is plain Docker.
 
 ### Docker / Docker Compose
 Used for: image build, local prod-shape smoke, CI smoke job.
@@ -192,7 +192,7 @@ Each step ends with green `pytest`, `ruff`, `check_no_orm.sh`, and `check_openap
    - [ ] Test: same but with `CORS_ALLOWED_ORIGINS` cleared → exit 1, stderr matches `CORS_ALLOWED_ORIGINS`. (Two cases is enough — they prove the loop, not exhaustive var coverage.)
 
 3. **Write `Dockerfile` + `.dockerignore` and verify it builds**
-   - Why: the image is the contract for every later step (compose, smoke, Fly). Landing it standalone — with a manual `docker build .` verification — keeps the surface change atomic and reviewable, and step 4's entrypoint can be tested against a real built image.
+   - Why: the image is the contract for every later step (compose, smoke, Railway). Landing it standalone — with a manual `docker build .` verification — keeps the surface change atomic and reviewable, and step 4's entrypoint can be tested against a real built image.
    - [ ] Create `Dockerfile` (multi-stage, Python 3.12-slim, builder/runtime split, `app` non-root user, EXPOSE 8000, `ENTRYPOINT ["/app/scripts/entrypoint.sh"]`).
    - [ ] Create `.dockerignore` (excludes `.venv`, `.git`, `__pycache__`, `.pytest_cache`, `.ruff_cache`, `node_modules`, `.epic`, `docs`, `*.egg-info`, `.env*`).
    - [ ] Manual verification: `docker build -t ilex-be:test .` succeeds locally; `docker run --rm ilex-be:test python -c "import django, gunicorn; print(django.__version__, gunicorn.__version__)"` prints both versions. (No Python test for this — building Docker images inside `pytest` is too slow / brittle; CI does the real build in step 7.)
@@ -206,7 +206,7 @@ Each step ends with green `pytest`, `ruff`, `check_no_orm.sh`, and `check_openap
    - [ ] Manual verification: with the dev Postgres running, `DJANGO_SETTINGS_MODULE=settings.prod ALLOWED_HOSTS=localhost CORS_ALLOWED_ORIGINS=http://localhost ./scripts/entrypoint.sh &` boots `gunicorn`; `./scripts/smoke_health.sh` exits 0.
 
 5. **Write `deploy/docker-compose.prod.yml` + `.env.prod.example`**
-   - Why: compose is the local equivalent of the Fly stack — a smoke gate without leaving the laptop. `.env.prod.example` documents the prod-required vars (separate from `.env.example` which is dev-shaped) and is the file CI's docker-smoke job copies.
+   - Why: compose is the local equivalent of the Railway stack — a smoke gate without leaving the laptop. `.env.prod.example` documents the prod-required vars (separate from `.env.example` which is dev-shaped) and is the file CI's docker-smoke job copies.
    - [ ] Create `deploy/docker-compose.prod.yml` (`postgres` + `backend` services per the **Lib: docker_compose_prod** section).
    - [ ] Create `.env.prod.example` with every required prod var (`DJANGO_SECRET_KEY`, `DATABASE_URL`, `ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, `OPENAPI_PUBLIC_DOCS=false`, `SESSION_COOKIE_SECURE=true`, `CSRF_COOKIE_SECURE=true`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`) — values are placeholders, the file is committed.
    - [ ] Add `.env.prod` to `.gitignore` (the real-values file).
@@ -224,25 +224,27 @@ Each step ends with green `pytest`, `ruff`, `check_no_orm.sh`, and `check_openap
    - [ ] Steps: checkout, setup-buildx, write `.env.prod` from job env, `docker compose -f deploy/docker-compose.prod.yml up --build -d`, `./scripts/smoke_health.sh`, `docker compose -f deploy/docker-compose.prod.yml down -v` (in `if: always()`).
    - [ ] Manual verification: re-run the same draft PR; `docker-smoke` job goes green. Intentionally break the entrypoint (e.g., add `exit 1` after `check_env`) → job fails with the entrypoint error in the logs; revert.
 
-8. **Pick deploy target (Fly.io) + commit `deploy/fly.toml`**
-   - Why: the brief and SPEC §2.9 leave the platform TBD; we pick now because every other artifact in this issue (Dockerfile, entrypoint, compose) is platform-neutral, so the only platform-specific commit is `fly.toml` itself. Picking Fly is justified above (release-command primitive, native Postgres add-on, free-tier).
-   - [ ] Create `deploy/fly.toml` per the **Lib: fly_target** section (app name, region `iad`, dockerfile build, release_command `python manage.py migrate_sql`, http_service on port 8000 with `/api/v1/health` healthcheck).
-   - [ ] Document the bootstrap sequence in `README.md` "Deploy" section: `fly launch --no-deploy`, `fly postgres create`, `fly postgres attach`, `fly secrets set DJANGO_SECRET_KEY=… ALLOWED_HOSTS=… CORS_ALLOWED_ORIGINS=…`, `fly deploy`. (One short subsection — README is already comprehensive; this is just the platform-specific glue.)
-   - [ ] No automated test — Fly deployment is operator-driven for v1. The `/api/v1/health` Fly healthcheck is the live equivalent of `smoke_health.sh` and is what the platform monitors post-deploy.
-   - [ ] Manual verification: `fly deploy` from a clean checkout puts a working URL behind HTTPS; `curl https://ilex-inventory-server.fly.dev/api/v1/health` returns `200 {"status":"ok",…}`. (Operator runs this once the secrets are set.)
+8. **Pick deploy target (Railway) — no platform config file needed**
+   - Why: the brief and SPEC §2.9 leave the platform TBD; we pick now because every other artifact in this issue (Dockerfile, entrypoint, compose) is platform-neutral. Railway builds the `Dockerfile` and reads env vars from the dashboard, so there is no platform-specific file to commit.
+   - [ ] Connect the GitHub repo to a new Railway service; confirm the build picks up the root `Dockerfile` and the entrypoint runs.
+   - [ ] Add the Postgres add-on to the Railway project; verify `DATABASE_URL` is auto-injected into the BE service env.
+   - [ ] Set required service env vars in the dashboard (or via `railway variables set`): `DJANGO_SECRET_KEY`, `ALLOWED_HOSTS=<service>.up.railway.app`, `CORS_ALLOWED_ORIGINS=<frontend origin>`, `OPENAPI_PUBLIC_DOCS=false`.
+   - [ ] Document the bootstrap sequence in `README.md` "Deploy" section.
+   - [ ] No automated test — Railway deployment is operator-driven for v1. Railway's healthcheck on `/api/v1/health` is the live equivalent of `smoke_health.sh`.
+   - [ ] Manual verification: push to `main` triggers a deploy; `curl https://<service>.up.railway.app/api/v1/health` returns `200 {"status":"ok",…}`.
 
 # Notes
 
-- **Why Fly.io over Railway / Render.** All three would work. Fly wins on three concrete points relative to v1: (1) `release_command` runs `migrate_sql` in a one-off VM *before* the new image takes traffic — Render does this with a `preDeployCommand` but only on paid plans; Railway has no first-class equivalent. (2) Fly Postgres `attach` injects `DATABASE_URL` directly into the app secrets; Railway and Render require a manual reference variable. (3) Single-region single-tenant with auto-stop-on-idle matches the v1 demo profile (low traffic, free-tier-friendly). Trade-off: Fly's one-shot `release_command` adds ~30s to each deploy vs. Railway's hot replace, but the safety is worth it for SQL migrations.
+- **Why Railway.** Railway's Postgres add-on auto-injects `DATABASE_URL` into the service env (no manual reference variable), and its Dockerfile-based deploys mean no platform-specific config file lives in the repo. The trade-off vs. a release-command primitive: Railway runs migrations on every container start through the entrypoint, not in a separate one-off VM. Mitigation: `migrate_sql` is idempotent and the entrypoint exits non-zero on migration failure, so a broken migration leaves the previous revision live (Railway keeps the old container until the new one passes its healthcheck). Hot replace makes deploys faster than a one-off-VM release model at the cost of a slightly larger blast radius for runtime errors that aren't migration-related.
 - **Why a separate `docker-compose.prod.yml` instead of overlaying.** The existing `deploy/docker-compose.yml` is dev-shaped (Postgres only, exposes 5432, no BE service). Overlaying via `docker compose -f base.yml -f prod.yml` would force the dev file to know about the BE service, which it deliberately doesn't (the dev BE is `manage.py runserver` directly on the host). Two files, zero overlay logic, is simpler.
 - **Why `mypy` is not in CI even though SPEC §4 lists it.** The repo has no `mypy.ini` / `pyproject.toml [tool.mypy]` config and no type stubs for `psycopg` / `drf_spectacular` are pinned. Adding mypy means making a configuration call (strict vs. permissive, ignoring third-party untyped packages, handling `django-stubs`) that is a separate piece of work. This issue includes the four gates that already pass locally; mypy lands in a follow-up if/when the team commits to a config. Documented here so the omission is explicit, not accidental.
-- **Why the entrypoint runs `migrate_sql` AND Fly's `release_command` does too.** The entrypoint runs migrations on every container start, including local compose where there is no platform release command. Fly's release command runs them in a one-off VM before the rollout, which catches migration failures *before* any traffic shifts (no half-deployed state). The two paths are convergent — `migrate_sql` is idempotent (it tracks applied filenames in `_sql_migrations`), so running it twice on the second-machine container start is a no-op. Belt-and-suspenders at zero cost.
-- **Non-root user in the image.** Runtime stage drops to UID 1001 (`app`). Required by Fly (and by general container best practice) — avoids running `gunicorn` as root and avoids volume permission surprises if the container ever mounts a host volume. The migration runner needs no special permissions; it connects to Postgres over TCP with the credentials in `DATABASE_URL`.
-- **Why no nginx in the prod compose / Fly stack.** Fly fronts every machine with its own TLS-terminating proxy (`fly-proxy`), so adding nginx would be a redundant hop. For local prod-shape smoke, plain `gunicorn` on `0.0.0.0:8000` is enough — TLS / static-file serving / connection multiplexing are all things v1 does not need (no static assets are served by the BE; the FE is a separate repo deployed independently).
+- **Why migrations run in the entrypoint (not a release command).** Railway has no first-class release-command primitive — every container start invokes `entrypoint.sh`, which runs `python manage.py migrate_sql` before exec'ing `gunicorn`. `migrate_sql` is idempotent (it tracks applied filenames in `_sql_migrations`), so a successful previous start makes the second start a no-op. A failed migration exits the container with a non-zero status before `gunicorn` boots, the new revision fails its healthcheck, and Railway keeps the previous revision serving traffic — the closest equivalent to a one-off-VM release-command without a separate primitive.
+- **Non-root user in the image.** Runtime stage drops to UID 1001 (`app`). General container best practice — avoids running `gunicorn` as root and avoids volume permission surprises if the container ever mounts a host volume. The migration runner needs no special permissions; it connects to Postgres over TCP with the credentials in `DATABASE_URL`.
+- **Why no nginx in the prod compose / Railway stack.** Railway terminates TLS at its edge proxy, so adding nginx would be a redundant hop. For local prod-shape smoke, plain `gunicorn` on `0.0.0.0:8000` is enough — TLS / static-file serving / connection multiplexing are all things v1 does not need (no static assets are served by the BE; the FE is a separate repo deployed independently).
 - **`OPENAPI_PUBLIC_DOCS` defaults to `false` in prod.** SPEC §2.9 specifies this. The reasoning: `/api/v1/openapi.json` is always public (the FE consumes it via build-time fetch in dev), but `/docs` (Swagger UI) is an interactive page that exposes endpoint shapes to anyone who finds it — fine for staging / preview deploys, off by default for the public domain. The toggle is an env var, not a setting, so flipping it on per-environment requires zero code change.
 - **Why a `validate` + `docker-smoke` two-job split rather than one job.** Two reasons: (1) `validate` runs in ~5 min on a cached venv; `docker-smoke` runs in ~3 min on top of that for the image build. Splitting means a broken unit test fails fast at 5 min instead of 8. (2) `docker-smoke` requires `needs: validate`, which gives a clean dependency graph in the GitHub Actions UI (red-X on `validate` shows `docker-smoke` as skipped, not failed).
 - **CI does not regenerate `openapi.json`.** ILEX-010's `check_openapi_drift.sh` runs `spectacular --validate` against a temp file and diffs — committed snapshot stays the source of truth. CI failing on drift means the developer needs to re-run the regen command locally and commit the result. Auto-regen would hide intent (per the ILEX-010 note already on file).
-- **No supervisor / process manager beyond `gunicorn`.** The container runs one process (`gunicorn` after `exec`). Fly handles restart-on-crash via its machine API; compose handles it via `restart: unless-stopped`. Adding `supervisord` or a custom process tree would only matter if we needed to run a sidecar (e.g., a background queue worker), which v1 doesn't have. Keeps PID 1 clean and SIGTERM propagation correct.
+- **No supervisor / process manager beyond `gunicorn`.** The container runs one process (`gunicorn` after `exec`). Railway restarts the container on crash; compose handles it via `restart: unless-stopped`. Adding `supervisord` or a custom process tree would only matter if we needed to run a sidecar (e.g., a background queue worker), which v1 doesn't have. Keeps PID 1 clean and SIGTERM propagation correct.
 
 # Journal
 

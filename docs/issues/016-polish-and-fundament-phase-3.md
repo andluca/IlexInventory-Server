@@ -202,7 +202,7 @@ The schema commitments and architectural decisions deserve documents that read a
 | **Architecture overview** | Add a 1-paragraph "What ships in v1 vs. Phase 3" block linking to `docs/agent.md`. Today the README treats Phase 3 as a forward-looking note; promote it to a first-class section. |
 | **Layering rules summary** | Pull a 5-line summary of `.claude/skills/ilex-discipline/SKILL.md` rules (no ORM, no SQL outside queries/, owner-scope, money/qty discipline, append-only ledger) — readers should not have to chase the skill file to know the discipline. |
 | **CI gates** | List the gates that CI runs (`pytest`, `ruff`, `check_no_orm.sh`, `check_openapi_drift.sh`, `migrate_sql`) and what each catches. Currently buried in `.github/workflows/ci.yml`. |
-| **Deploy** | Already added in ILEX-011; verify the Fly.io commands and add a "rollback" subsection. |
+| **Deploy** | Already added in ILEX-011; verify the Railway commands and add a "rollback" subsection. |
 
 ### 3.2 [`docs/specs/SPEC.md`](../../docs/specs/SPEC.md)
 

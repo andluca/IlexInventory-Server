@@ -190,7 +190,7 @@ Layering rules (full set in [`.claude/skills/ilex-discipline/SKILL.md`](.claude/
 | 008 | Financials (dashboard, margin, D13 markup formula) | ✅ done |
 | 009 | CSV exports + `0009_indexes` | ✅ done |
 | 010 | OpenAPI integration + frontend type generation | ✅ done |
-| 011 | Deploy (Docker, GitHub Actions CI, Fly.io) | ✅ done |
+| 011 | Deploy (Docker, GitHub Actions CI, Railway) | ✅ done |
 | 016 | Polish pass — bug fixes + DRY extraction (closes the v1) | ✅ done |
 
 **Deferred (Phase 3)**: ILEX-012 through ILEX-015 specify the "Ask Ilex" agent — out of v1 scope, postponed to a later phase. The schema commitments that make Phase 3 buildable later (read-only role substrate, owner-projecting `v_*` views, append-only ledger, immutable allocations) all landed in v1. Specs at [`docs/specs/agent.md`](docs/specs/agent.md) and the user-facing runtime narrative at [`docs/agent.md`](docs/agent.md).
@@ -228,29 +228,25 @@ docs/
 
 ## Deploy
 
-Production target: **Fly.io** (single-region `iad`, native Postgres add-on, `release_command` runs `migrate_sql` before traffic shifts).
+Production target: **Railway** — Dockerfile build, managed Postgres add-on, `DATABASE_URL` auto-injected. The container's `entrypoint.sh` runs `migrate_sql` before `gunicorn` boots, so migrations land before traffic shifts.
 
 Bootstrap sequence (one-time, operator):
 
 ```bash
-# 1. Create the app (no deploy yet)
-fly launch --no-deploy
+# 1. Create the project + service from this repo (Railway dashboard or CLI)
+railway init
+railway up           # builds the Dockerfile, deploys the service
 
-# 2. Provision managed Postgres and inject DATABASE_URL into secrets
-fly postgres create
-fly postgres attach
+# 2. Add managed Postgres in the Railway dashboard; DATABASE_URL is auto-injected.
 
-# 3. Set remaining required secrets
-fly secrets set \
+# 3. Set remaining required env vars (dashboard or CLI)
+railway variables set \
   DJANGO_SECRET_KEY="$(openssl rand -hex 32)" \
-  ALLOWED_HOSTS="ilex-inventory-server.fly.dev" \
-  CORS_ALLOWED_ORIGINS="https://your-frontend.vercel.app"
-
-# 4. Deploy (Fly runs migrate_sql as release_command before traffic shifts)
-fly deploy
+  ALLOWED_HOSTS="your-service.up.railway.app" \
+  CORS_ALLOWED_ORIGINS="https://your-frontend.netlify.app"
 ```
 
-Health probe: `curl https://ilex-inventory-server.fly.dev/api/v1/health`
+Health probe: `curl https://your-service.up.railway.app/api/v1/health`
 
 Local prod-shape smoke (requires Docker):
 
@@ -261,7 +257,7 @@ docker compose -f deploy/docker-compose.prod.yml up --build -d
 docker compose -f deploy/docker-compose.prod.yml down -v
 ```
 
-See `deploy/fly.toml` for platform config and `.env.prod.example` for the full env-var list.
+See `.env.prod.example` for the full env-var list. No platform-specific config file is committed — Railway builds the `Dockerfile` and reads env vars from the dashboard.
 
 ---
 

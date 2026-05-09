@@ -158,7 +158,7 @@ Used for: `gen_random_bytes(n)` inside the UUIDv7 SQL function (random bits)
 Loaded via: `CREATE EXTENSION IF NOT EXISTS pgcrypto` in `0001_init.sql`
 
 * No new Python dependency; psycopg already bundled in ILEX-001
-* Available on every supported Postgres host (RDS, Fly Postgres, Railway, local docker)
+* Available on every supported Postgres host (RDS, Railway, local docker)
 
 
 # Plan

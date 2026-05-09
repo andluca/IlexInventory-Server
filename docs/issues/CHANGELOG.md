@@ -23,7 +23,7 @@ Single source of truth for the issue ledger. Each issue's spec lives at `docs/is
 | [008](008-implement-financials-app.md) | Financials (margin + dashboard) | [`80f500e`](../../commit/80f500e) | `0008_financials.sql` |
 | [009](009-add-csv-exports-and-indexes.md) | CSV exports + indexes | [`461bac1`](../../commit/461bac1) | `0009_indexes.sql` |
 | [010](010-integrate-openapi-with-frontend.md) | OpenAPI tags/hooks + drift snapshot | [`3686576`](../../commit/3686576) | — |
-| [011](011-setup-deploy-pipeline.md) | Deploy (Docker + Fly + GitHub Actions) | [`2b0e196`](../../commit/2b0e196) | — |
+| [011](011-setup-deploy-pipeline.md) | Deploy (Docker + Railway + GitHub Actions) | [`2b0e196`](../../commit/2b0e196) | — |
 | [016](016-polish-and-fundament-phase-3.md) | Polish pass — bug fixes + DRY + docs | [`6fbb12d`](../../commit/6fbb12d), [`9be0d12`](../../commit/9be0d12), [`4d502aa`](../../commit/4d502aa) | — |
 
 **v1 MVP gate:** 498 tests passing. Ruff clean. No-ORM gate clean. OpenAPI snapshot up to date.

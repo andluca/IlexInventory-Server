@@ -56,7 +56,7 @@ See "Ask Ilex" below — the actual narrative differentiator.
 - **Frontend:** React + TypeScript (strict), Mantine for components, Tailwind for one-offs, TanStack Query for fetching.
 - **Database:** PostgreSQL 16+. Money as `numeric(14, 4)`, never floats. Quantities as `numeric(14, 4)` in base units.
 - **Tests:** pytest + pytest-django. Focus on cost-layer math, FEFO selection, recall traceability, profit computation, auth boundaries.
-- **Deploy:** Docker for backend, frontend, Postgres. Cloud target TBD (Fly.io / Railway / Render).
+- **Deploy:** Docker for backend, frontend, Postgres. Production runs on Railway (managed Postgres add-on, `DATABASE_URL` auto-injected).
 
 A few constraints worth being explicit about — these are the ones that get silently violated otherwise:
 
