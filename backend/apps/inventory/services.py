@@ -31,6 +31,8 @@ from apps.inventory.errors import (
 from apps.inventory.errors import ValidationError as InventoryValidationError
 from apps.inventory.queries.batches import (
     insert_batch,
+    list_eligible_for_fefo,
+    select_batch_by_id,
     select_batch_for_update,
     set_recall_state,
     update_batch_metadata as _update_batch_metadata_query,
@@ -63,6 +65,63 @@ def _row_to_movement(row: dict) -> MovementRow:
         if key in r and r[key] is not None and not isinstance(r[key], str):
             r[key] = str(r[key])
     return r  # type: ignore[return-value]
+
+
+# --------------------------------------------------------------------------
+# Cursor-accepting service surface — for cross-app within-transaction work.
+#
+# These functions take `cur` as their first argument so the caller (a service
+# in another app, e.g. apps.sales) can keep the connection and transaction
+# open across multiple steps. The FOR UPDATE locks acquired by
+# list_eligible_for_fefo survive until the caller commits.
+#
+# Wrap query functions, never bypass them. The wrappers ARE the cross-app
+# contract — sales depends on these signatures, not on the underlying SQL.
+# --------------------------------------------------------------------------
+
+
+def fefo_eligible_batches(
+    cur, *, owner_id: int, product_id: str
+) -> list[dict]:
+    """SELECT eligible batches FOR UPDATE in FEFO order. Caller holds the tx."""
+    return list_eligible_for_fefo(
+        cur, params={"owner_id": owner_id, "product_id": product_id}
+    )
+
+
+def get_batch_with_on_hand(
+    cur, *, owner_id: int, batch_id: str
+) -> dict | None:
+    """Read a single batch (no lock) with v_stock_by_batch.on_hand joined."""
+    return select_batch_by_id(
+        cur, params={"id": batch_id, "owner_id": owner_id}
+    )
+
+
+def append_movement(
+    cur,
+    *,
+    owner_id: int,
+    batch_id: str,
+    kind: str,
+    signed_quantity: Decimal,
+    notes: str | None = None,
+    reference_type: str | None = None,
+    reference_id: str | None = None,
+) -> dict:
+    """Append a stock_movements row inside the caller's transaction."""
+    return insert_movement(
+        cur,
+        params={
+            "owner_id": owner_id,
+            "batch_id": batch_id,
+            "kind": kind,
+            "signed_quantity": signed_quantity,
+            "notes": notes,
+            "reference_type": reference_type,
+            "reference_id": reference_id,
+        },
+    )
 
 
 def _insert_batch_with_receipt(

@@ -20,8 +20,11 @@ import psycopg.errors
 
 from apps.core.db import connect as _connect, savepoint_rollback
 
-from apps.inventory.queries.batches import list_eligible_for_fefo, select_batch_by_id as select_batch_with_on_hand
-from apps.inventory.queries.movements import insert_movement
+from apps.inventory.services import (
+    append_movement,
+    fefo_eligible_batches,
+    get_batch_with_on_hand,
+)
 from apps.sales.errors import (
     InsufficientStock,
     InvalidAllocation,
@@ -111,8 +114,8 @@ def _fefo_walk(
         required = Decimal(str(line["quantity"]))
         line_id = str(line["id"])
 
-        batches = list_eligible_for_fefo(
-            cur, params={"owner_id": owner_id, "product_id": product_id}
+        batches = fefo_eligible_batches(
+            cur, owner_id=owner_id, product_id=product_id
         )
 
         remaining = required
@@ -176,8 +179,8 @@ def _resolve_line_for_allocation(
 
 
 def _load_batch_for_explicit_allocation(cur, *, owner_id: int, batch_id: str) -> dict:
-    """Read batch + on_hand via inventory's query layer; raise on miss."""
-    batch = select_batch_with_on_hand(cur, params={"id": batch_id, "owner_id": owner_id})
+    """Read batch + on_hand via inventory's service layer; raise on miss."""
+    batch = get_batch_with_on_hand(cur, owner_id=owner_id, batch_id=batch_id)
     if batch is None:
         raise InvalidAllocation(detail=f"batch_id {batch_id} not found for this owner.")
     return batch
@@ -567,17 +570,14 @@ def commit_sales_order(
                         },
                     )
                     alloc_id = str(alloc["id"])
-                    insert_movement(
+                    append_movement(
                         cur,
-                        params={
-                            "owner_id": owner_id,
-                            "batch_id": plan["batch_id"],
-                            "kind": "sale",
-                            "signed_quantity": -plan["quantity"],
-                            "notes": None,
-                            "reference_type": "sale_allocation",
-                            "reference_id": alloc_id,
-                        },
+                        owner_id=owner_id,
+                        batch_id=plan["batch_id"],
+                        kind="sale",
+                        signed_quantity=-plan["quantity"],
+                        reference_type="sale_allocation",
+                        reference_id=alloc_id,
                     )
                     inserted_allocs.append(alloc)
 
@@ -638,17 +638,14 @@ def void_sales_order(
                 )
 
                 for alloc in allocs:
-                    insert_movement(
+                    append_movement(
                         cur,
-                        params={
-                            "owner_id": owner_id,
-                            "batch_id": str(alloc["batch_id"]),
-                            "kind": "sale_void",
-                            "signed_quantity": Decimal(str(alloc["allocated_quantity"])),
-                            "notes": None,
-                            "reference_type": "sale_allocation",
-                            "reference_id": str(alloc["id"]),
-                        },
+                        owner_id=owner_id,
+                        batch_id=str(alloc["batch_id"]),
+                        kind="sale_void",
+                        signed_quantity=Decimal(str(alloc["allocated_quantity"])),
+                        reference_type="sale_allocation",
+                        reference_id=str(alloc["id"]),
                     )
 
                 lines = select_lines_for_sales_order(
