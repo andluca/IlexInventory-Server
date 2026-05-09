@@ -9,7 +9,7 @@
         "/api/v1/auth/login": {
             "post": {
                 "operationId": "auth_login_create",
-                "description": "Authenticate an existing user and set session cookie.\n\nCSRF-exempt: same reasoning as SignupView.",
+                "description": "Authenticate an existing user and set session cookie.\n\nCSRF-exempt for the inbound request (no token possible pre-login);\nsets the csrftoken cookie on the response so subsequent mutations\nhave a token to echo back via X-CSRFToken.",
                 "summary": "Log in with email and password",
                 "tags": [
                     "auth"
@@ -47,7 +47,7 @@
         "/api/v1/auth/me": {
             "get": {
                 "operationId": "auth_me_retrieve",
-                "description": "Return the currently authenticated user.\n\nReturns 401 when no session is present (IsAuthenticated default).",
+                "description": "Return the currently authenticated user.\n\nReturns 401 when no session is present (IsAuthenticated default).\nRefreshes the csrftoken cookie on every call so a long-lived session\ncan recover from a missing/stale token by re-bootstrapping.",
                 "summary": "Return the current authenticated user",
                 "tags": [
                     "auth"
@@ -70,7 +70,7 @@
         "/api/v1/auth/signup": {
             "post": {
                 "operationId": "auth_signup_create",
-                "description": "Create a new account and log in immediately.\n\nCSRF-exempt: client cannot have a CSRF token before first login.\nAchieved by setting authentication_classes=[] which disables DRF's\nSessionAuthentication CSRF enforcement.",
+                "description": "Create a new account and log in immediately.\n\nCSRF-exempt for the inbound request (no token possible pre-signup);\nsets the csrftoken cookie on the response so subsequent mutations\nhave a token to echo back via X-CSRFToken.",
                 "summary": "Sign up a new account",
                 "tags": [
                     "auth"
