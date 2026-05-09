@@ -9,12 +9,9 @@ Rules:
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime
-
 from apps.core.db import row_to_dict as _row_to_dict
 from apps.core.owner_scope import scoped
-from apps.core.pagination import decode_cursor, encode_cursor
+from apps.core.pagination import build_next_cursor, decode_cursor
 
 
 @scoped
@@ -217,15 +214,4 @@ def list_sales_orders(cur, *, params: dict) -> tuple[list[dict], str | None]:
     cols = [d.name for d in cur.description]
     all_rows = [dict(zip(cols, row)) for row in cur.fetchall()]
 
-    has_more = len(all_rows) > limit
-    rows = all_rows[:limit]
-
-    next_cursor: str | None = None
-    if has_more and rows:
-        last = rows[-1]
-        next_cursor = encode_cursor(
-            uuid.UUID(str(last["id"])),
-            last["created_at"] if isinstance(last["created_at"], datetime) else datetime.fromisoformat(str(last["created_at"])),
-        )
-
-    return rows, next_cursor
+    return build_next_cursor(all_rows, limit)

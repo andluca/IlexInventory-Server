@@ -58,6 +58,30 @@ def decode_cursor(cursor: str | None) -> tuple[uuid.UUID, datetime] | None:
     return uid, dt
 
 
+def build_next_cursor(
+    rows: list[dict],
+    limit: int,
+    *,
+    id_key: str = "id",
+    ts_key: str = "created_at",
+) -> tuple[list[dict], str | None]:
+    """Slice an over-fetched (limit+1) row list and emit (page, next_cursor).
+
+    Caller fetches `limit + 1` rows; this helper returns the first `limit`
+    rows plus an opaque cursor pointing past the last row, or None if there
+    is no next page.
+    """
+    has_more = len(rows) > limit
+    page = rows[:limit]
+    if not (has_more and page):
+        return page, None
+    last = page[-1]
+    ts = last[ts_key]
+    if not isinstance(ts, datetime):
+        ts = datetime.fromisoformat(str(ts))
+    return page, encode_cursor(uuid.UUID(str(last[id_key])), ts)
+
+
 # ---------------------------------------------------------------------------
 # Decimal+UUID cursor (for /financials/margin — ordered by revenue DESC, product_id DESC)
 # ---------------------------------------------------------------------------
