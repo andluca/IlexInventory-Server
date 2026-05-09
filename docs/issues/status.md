@@ -1,32 +1,34 @@
 # Project Status
 
-Last updated: 2026-05-08T21:00:00Z (ILEX-010 completed)
+Last updated: 2026-05-09 (v1 MVP complete; ILEX-016 polish closed; agent phase cancelled)
 
 ## Issues
 
-- [x] 001-bootstrap-django-project.md - completed (2026-05-08T00:00:00)
-- [x] 002-setup-foundation-and-init-schema.md - completed (2026-05-08T00:05:00)
-- [x] 003-implement-auth-in-core.md - completed (2026-05-08T01:00:00)
-- [x] 004-implement-catalog-app.md - completed (2026-05-08T09:30:00Z)
-- [x] 005-implement-procurement-app.md - completed (2026-05-08T12:02:20Z)
-- [ ] 006-implement-inventory-app.md - in_progress (2026-05-08T13:00:00Z)
-- [ ] 007-implement-sales-app.md - in_progress (2026-05-08T14:00:00Z)
-- [x] 008-implement-financials-app.md - completed (2026-05-08T16:00:00Z)
-- [x] 009-add-csv-exports-and-indexes.md - completed (2026-05-08T18:30:00Z)
-- [x] 010-integrate-openapi-with-frontend.md - completed (2026-05-08T21:00:00Z)
-- [ ] 011-setup-deploy-pipeline.md - in_progress (2026-05-08T22:00:00Z)
-- [ ] 012-setup-agent-foundation-and-readonly-role.md - pending (Phase 3)
-- [ ] 013-implement-chat-endpoint-and-query-mode.md - pending (Phase 3)
-- [ ] 014-implement-draft-mode-and-domain-skills.md - pending (Phase 3)
-- [ ] 015-add-onboarding-skill-and-empty-state-integration.md - pending (Phase 3)
+- [x] 001-bootstrap-django-project.md - completed
+- [x] 002-setup-foundation-and-init-schema.md - completed
+- [x] 003-implement-auth-in-core.md - completed
+- [x] 004-implement-catalog-app.md - completed
+- [x] 005-implement-procurement-app.md - completed
+- [x] 006-implement-inventory-app.md - completed
+- [x] 007-implement-sales-app.md - completed
+- [x] 008-implement-financials-app.md - completed
+- [x] 009-add-csv-exports-and-indexes.md - completed
+- [x] 010-integrate-openapi-with-frontend.md - completed
+- [x] 011-setup-deploy-pipeline.md - completed
+- [x] 016-polish-and-fundament-phase-3.md - completed (final v1 polish; bugs closed, DRY extracted, docs updated)
+- [~] 012-setup-agent-foundation-and-readonly-role.md - cancelled (Phase 3 deprioritized)
+- [~] 013-implement-chat-endpoint-and-query-mode.md - cancelled
+- [~] 014-implement-draft-mode-and-domain-skills.md - cancelled
+- [~] 015-add-onboarding-skill-and-empty-state-integration.md - cancelled
 
 ## Summary
 
-Total: 15 issues
-Completed: 10
+Total: 16 issues
+Completed: 12 (v1 MVP)
+Cancelled: 4 (Phase 3 agent — out of scope)
 In progress: 0
-Pending: 5
 Failed: 0
+Final test count: 498 passing
 
 ## Execution Log
 

@@ -128,19 +128,31 @@ Future FEFO allocations skip the batch immediately ([BE-D9](docs/decisions.md)).
 ## Tests
 
 ```bash
-pytest                                # all tests
+pytest                                # all 498 tests
 pytest backend/apps/core/tests/unit   # pure-logic unit tests
 pytest backend/apps/core/tests/api    # integration: HTTP → service → real Postgres
 ```
 
-CI gates per [`docs/specs/SPEC.md`](docs/specs/SPEC.md):
+Test isolation: every DB-touching test runs against a fresh data state via the autouse `_wipe_data_tables_between_tests` fixture in [`backend/conftest.py`](backend/conftest.py). Service-layer commits and autocommit seed helpers are wiped between tests; migration tracker rows and Django auth metadata survive.
 
-```bash
-mypy backend/                                                                    # type check
-ruff check backend/                                                              # lint
-scripts/check_no_orm.sh                                                          # 0 ORM imports outside auth.py (BE-D14 carve-out)
-grep -RE "cursor\.execute" backend/apps/*/services.py backend/apps/*/apis.py     # 0 (BE-D12)
-```
+CI gates ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)):
+
+| Gate | What it catches |
+|---|---|
+| `pytest` (cumulative, real Postgres 16) | Behavioral regressions across all 6 apps |
+| `ruff check backend/` | Lint, unused imports, function-local imports per `ilex-discipline` skill |
+| `scripts/check_no_orm.sh` | Django ORM imports outside the BE-D14 carve-out (`apps/core/auth.py`) |
+| `scripts/check_openapi_drift.sh` | Committed `backend/openapi.json` matches `manage.py spectacular` output |
+| `manage.py migrate_sql` (in CI) | All SQL migrations apply cleanly to a fresh Postgres |
+
+Layering rules (full set in [`.claude/skills/ilex-discipline/SKILL.md`](.claude/skills/ilex-discipline/SKILL.md)):
+
+1. No Django ORM. `from django.db.models` is forbidden anywhere except `apps/core/auth.py` (BE-D14).
+2. No SQL outside `apps/{app}/queries/`. APIs and services never call `cursor.execute`.
+3. Money/qty are `Decimal` in Python and `numeric(14,4)` in DB. Never `float`.
+4. Owner-scoped queries use `@scoped`. Cross-owner access returns 404, not 403 (D4).
+5. `stock_movements` is append-only — UPDATE and DELETE blocked by a row-level trigger (D1).
+6. Imports go at module top. Function-local `from apps.X import Y` is forbidden outside tests unless a `# break cycle:` comment names a real circular import.
 
 ---
 
@@ -154,42 +166,34 @@ grep -RE "cursor\.execute" backend/apps/*/services.py backend/apps/*/apis.py    
 | [`docs/decisions.md`](docs/decisions.md) | 15 numbered architectural decisions (D0–D14), each with rationale + rejected alternatives |
 | [`docs/specs/SPEC.md`](docs/specs/SPEC.md) | Full project specification: foundation, features per app, validation gates, phases, decisions table |
 | [`docs/endpoints.md`](docs/endpoints.md) | Endpoint catalog (36 endpoints, by app) with idempotency + pagination columns |
-| [`docs/issues/`](docs/issues/) | Implementation issue breakdown — 11 v1 MVP issues + 4 Phase 3 agent issues derived from the specs |
-| [`docs/agent.md`](docs/agent.md) | "Ask Ilex" agent — runtime narrative, three modes, why the schema decisions enable Explain mode |
-| [`docs/specs/agent.md`](docs/specs/agent.md) | Agent implementation spec (Phase 3): foundation, modes, validation gates, decisions D15–D16 |
+| [`docs/issues/`](docs/issues/) and [`.epic/issues/`](.epic/issues/) | Implementation issue breakdown — 12 v1 MVP issues. The four Phase 3 agent issues are present but cancelled. |
+| [`docs/agent.md`](docs/agent.md) | "Ask Ilex" agent reference — runtime narrative + three-mode design, kept for reference (not built). |
+| [`docs/specs/agent.md`](docs/specs/agent.md) | Agent implementation spec — kept for reference (cancelled scope). |
 
 ---
 
 ## Implementation status
 
-15 issues total (see [`docs/issues/status.md`](docs/issues/status.md)). Each ships a complete vertical: schema → queries → services → API → tests.
+12 issues shipped end-to-end (see [`.epic/issues/`](.epic/issues/) and [`docs/issues/status.md`](docs/issues/status.md)). Each ships a complete vertical: schema → queries → services → API → tests.
 
-**v1 MVP** (11 issues):
+**v1 MVP — complete** (12 issues):
 
 | # | Issue | Status |
 |---|---|---|
 | 001 | Bootstrap Django project | ✅ done |
 | 002 | Foundation helpers + `0001_init` schema | ✅ done |
-| 003 | Auth (signup, login, logout, /me) | 🔄 in progress |
-| 004 | Catalog (products) | ⏳ pending |
-| 005 | Procurement (POs) | ⏳ pending |
-| 006 | Inventory (batches, movements, recall) | ⏳ pending |
-| 007 | Sales (FEFO commit, allocations, void) | ⏳ pending |
-| 008 | Financials (dashboard, margin, D13 markup formula) | ⏳ pending |
-| 009 | CSV exports + `0007_indexes` | ⏳ pending |
-| 010 | OpenAPI + FE handoff | ⏳ pending |
-| 011 | Deploy (Docker, CI) | ⏳ pending |
+| 003 | Auth (signup, login, logout, /me) | ✅ done |
+| 004 | Catalog (products) | ✅ done |
+| 005 | Procurement (POs) | ✅ done |
+| 006 | Inventory (batches, movements, recall) | ✅ done |
+| 007 | Sales (FEFO commit, allocations, void) | ✅ done |
+| 008 | Financials (dashboard, margin, D13 markup formula) | ✅ done |
+| 009 | CSV exports + `0009_indexes` | ✅ done |
+| 010 | OpenAPI integration + frontend type generation | ✅ done |
+| 011 | Deploy (Docker, GitHub Actions CI, Fly.io) | ✅ done |
+| 016 | Polish pass — bug fixes + DRY extraction (this issue closes the v1) | ✅ done |
 
-**Phase 3 — Agent** (4 issues, post-MVP):
-
-| # | Issue | Status |
-|---|---|---|
-| 012 | Agent foundation + `ilex_agent_ro` read-only role + view rewrites | ⏳ pending |
-| 013 | `/agent/chat` endpoint + Query mode + SSE streaming | ⏳ pending |
-| 014 | Draft mode + domain skill files | ⏳ pending |
-| 015 | Onboarding skill + empty-state integration | ⏳ pending |
-
-The agent is out of v1 MVP, but its schema commitments (read-only role, owner-filtered views) ship from day one so the agent can be turned on later without migrating data.
+**Cancelled (post-v1)**: ILEX-012 through ILEX-015 (the "Ask Ilex" agent — Phase 3) are out of scope. The agent specification ([`docs/specs/agent.md`](docs/specs/agent.md)) and runtime walkthrough ([`docs/agent.md`](docs/agent.md)) remain in the repo as a design reference, but no agent code ships.
 
 ---
 

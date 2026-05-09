@@ -125,12 +125,14 @@ CI gates per the executor's contract:
 | `POST /purchase-orders/{id}/receive` | Creates batches + movements atomically — retry can't double-receive |
 | `POST /sales-orders/{id}/commit` | FEFO walk + allocations + sale movements — retry can't double-allocate |
 | `POST /batches` | Manual batch creation + initial receipt movement |
-| `POST /batches/{id}/movements` (kind=`write_off` only) | Removes stock — retry can't double-write-off |
+| `POST /batches/{id}/movements` (kind=`write_off` only) | Removes stock — retry can't double-write-off. Adjustments do not require the header. |
+| `POST /products/import` | CSV bulk-import with per-row savepoints — retry can't double-insert |
 | `POST /batches/{id}/recall`, `un-recall` | Idempotent by design (D3) but accept the header for client uniformity |
 | `POST /sales-orders/{id}/void` | Idempotent by design (D8) but accept the header for client uniformity |
 
+- The cache stores the **rendered** response body (DRF's JSONRenderer output), so `Decimal`, `datetime`, and `UUID` values round-trip correctly. Pre-ILEX-016 the cache used `json.dumps(response.data)` directly, which raised `TypeError` on those types and silently no-op'd the cache for monetary endpoints — now closed.
 - CSV export: `?format=csv` query param on supporting endpoints (DRF content negotiation), streamed `text/csv`
-- Cross-owner access: 404, never 403 (D4)
+- Cross-owner access: 404, never 403 (D4). The 404 body uses the standard error envelope (`{"error": "<Code>NotFound", "detail": "..."}`); empty `{}` 404 responses are forbidden — the contract guarantees a typed error body on every error status code.
 - 4xx errors return `{ "error": "ErrorCode", "detail"?: "human message", "fields"?: { ... } }`
 
 ### 2.7 Type Generation
@@ -306,6 +308,7 @@ Eligible batches are walked in this order; expired and recalled batches are invi
 3. Otherwise (FEFO walk per line):
    - Lock eligible batches (`SELECT ... FOR UPDATE OF b`) ordered by `expiration_date ASC NULLS LAST, created_at ASC`
    - Greedy-allocate from earliest-expiring batches until line quantity is satisfied
+   - **Cumulative across lines**: when two SO lines target the same product, the second line's eligibility deducts what earlier lines of *this same walk* have already planned to take from each batch. Without this accumulator the DB has no on-hand CHECK to prevent a single committed SO from driving a batch's `on_hand` negative. (ILEX-016 §1.1)
    - If insufficient on-hand: rollback, return 422 with `{ shortfall: { product_id, required, available } }`
 4. In one transaction:
    - INSERT one `sale_allocations` row per (line, batch) pair with `unit_cost = batch.unit_cost`

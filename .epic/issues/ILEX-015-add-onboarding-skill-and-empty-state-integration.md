@@ -1,9 +1,9 @@
 ---
 id: ILEX-015
 github_id: null
-status: open
+status: cancelled
 assignee: null
-state: Pending
+state: Cancelled
 type: item
 depends_on: [ILEX-014]
 ---
