@@ -34,6 +34,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from apps.core.errors import ValidationError, to_response
+from apps.core.idempotency_queries import cache_insert, cache_lookup
 
 _JSON_RENDERER = JSONRenderer()
 
@@ -89,18 +90,9 @@ def _lookup_cache(
     try:
         with psycopg.connect(db_url, autocommit=True) as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT response_status, response_body
-                      FROM idempotency_keys
-                     WHERE owner_id = %s AND key = %s AND endpoint = %s
-                    """,
-                    (int(owner_id), key, endpoint),
+                return cache_lookup(
+                    cur, owner_id=int(owner_id), key=key, endpoint=endpoint
                 )
-                row = cur.fetchone()
-        if row is None:
-            return None
-        return row[0], row[1]
     except psycopg.Error:
         # Cache lookup failure: treat as miss so the view can still execute.
         return None
@@ -125,20 +117,13 @@ def _store_cache(
     try:
         with psycopg.connect(db_url, autocommit=True) as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO idempotency_keys
-                           (owner_id, key, endpoint, response_status, response_body)
-                    VALUES (%s, %s, %s, %s, %s::jsonb)
-                    ON CONFLICT (owner_id, key, endpoint) DO NOTHING
-                    """,
-                    (
-                        int(owner_id),
-                        key,
-                        endpoint,
-                        response.status_code,
-                        body_text,
-                    ),
+                cache_insert(
+                    cur,
+                    owner_id=int(owner_id),
+                    key=key,
+                    endpoint=endpoint,
+                    status=response.status_code,
+                    body_text=body_text,
                 )
     except psycopg.Error:
         # Storage failure is non-fatal: the view already ran successfully.
