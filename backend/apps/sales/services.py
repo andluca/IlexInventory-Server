@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import datetime
 from decimal import Decimal
-from typing import Any
 
 import psycopg
 import psycopg.errors
@@ -341,6 +340,41 @@ def create_sales_order_draft(
     return row_to_sales_order(header, inserted_lines, [])
 
 
+def _load_existing_so_draft_or_raise(cur, *, owner_id: int, so_id: str) -> dict:
+    """Load an SO and assert it's a draft for this owner. Raise on miss/non-draft."""
+    existing = select_sales_order_by_id(
+        cur, params={"id": so_id, "owner_id": owner_id}
+    )
+    if existing is None:
+        raise SalesOrderNotFound(detail=f"Sales order {so_id} not found.")
+    if existing["status"] != "draft":
+        raise SalesOrderNotDraft(detail=f"Sales order {so_id} is not a draft.")
+    return existing
+
+
+def _replace_so_draft_lines(
+    cur, *, owner_id: int, so_id: str, lines: list[NewSaleLine]
+) -> list[dict]:
+    """DELETE all SO lines and INSERT the replacement set. Returns inserted rows."""
+    delete_lines_for_sales_order(
+        cur, params={"sales_order_id": so_id, "owner_id": owner_id}
+    )
+    inserted: list[dict] = []
+    for line in lines:
+        ln = insert_sales_order_line(
+            cur,
+            params={
+                "owner_id": owner_id,
+                "sales_order_id": so_id,
+                "product_id": str(line["product_id"]),
+                "quantity": line["quantity"],
+                "sell_price": line["sell_price"],
+            },
+        )
+        inserted.append(ln)
+    return inserted
+
+
 def update_sales_order_draft(
     *,
     owner_id: int,
@@ -367,45 +401,23 @@ def update_sales_order_draft(
     with _connect() as conn:
         try:
             with conn.cursor() as cur:
-                existing = select_sales_order_by_id(
-                    cur, params={"id": so_id, "owner_id": owner_id}
-                )
-                if existing is None:
-                    raise SalesOrderNotFound(
-                        detail=f"Sales order {so_id} not found."
-                    )
-                if existing["status"] != "draft":
-                    raise SalesOrderNotDraft(
-                        detail=f"Sales order {so_id} is not a draft."
-                    )
+                _load_existing_so_draft_or_raise(cur, owner_id=owner_id, so_id=so_id)
 
-                update_params: dict[str, Any] = {
-                    "id": so_id,
-                    "owner_id": owner_id,
-                    "customer_name": customer_name,
-                    "customer_contact": customer_contact,
-                    "customer_contact_set": customer_contact_set,
-                }
-                header = update_sales_order_header(cur, params=update_params)
+                header = update_sales_order_header(
+                    cur,
+                    params={
+                        "id": so_id,
+                        "owner_id": owner_id,
+                        "customer_name": customer_name,
+                        "customer_contact": customer_contact,
+                        "customer_contact_set": customer_contact_set,
+                    },
+                )
 
                 if lines is not None:
-                    delete_lines_for_sales_order(
-                        cur,
-                        params={"sales_order_id": so_id, "owner_id": owner_id},
+                    inserted_lines = _replace_so_draft_lines(
+                        cur, owner_id=owner_id, so_id=so_id, lines=lines
                     )
-                    inserted_lines = []
-                    for line in lines:
-                        ln = insert_sales_order_line(
-                            cur,
-                            params={
-                                "owner_id": owner_id,
-                                "sales_order_id": so_id,
-                                "product_id": str(line["product_id"]),
-                                "quantity": line["quantity"],
-                                "sell_price": line["sell_price"],
-                            },
-                        )
-                        inserted_lines.append(ln)
                 else:
                     inserted_lines = select_lines_for_sales_order(
                         cur,
@@ -516,6 +528,36 @@ def list_sales_orders_for_owner(
     return {"items": items, "next_cursor": next_cursor}
 
 
+def _persist_allocations_and_sale_movements(
+    cur, *, owner_id: int, planned: list[dict]
+) -> list[dict]:
+    """Insert sale_allocations + 'sale' movements for a planned FEFO/explicit list."""
+    inserted: list[dict] = []
+    for plan in planned:
+        unit_cost = Decimal(str(plan["batch"]["unit_cost"]))
+        alloc = insert_sale_allocation(
+            cur,
+            params={
+                "owner_id": owner_id,
+                "sales_order_line_id": plan["line_id"],
+                "batch_id": plan["batch_id"],
+                "allocated_quantity": plan["quantity"],
+                "unit_cost": unit_cost,
+            },
+        )
+        append_movement(
+            cur,
+            owner_id=owner_id,
+            batch_id=plan["batch_id"],
+            kind="sale",
+            signed_quantity=-plan["quantity"],
+            reference_type="sale_allocation",
+            reference_id=str(alloc["id"]),
+        )
+        inserted.append(alloc)
+    return inserted
+
+
 def commit_sales_order(
     *,
     owner_id: int,
@@ -556,30 +598,9 @@ def commit_sales_order(
                         cur, owner_id=owner_id, lines=lines, allocations=allocations
                     )
 
-                inserted_allocs = []
-                for plan in planned:
-                    unit_cost = Decimal(str(plan["batch"]["unit_cost"]))
-                    alloc = insert_sale_allocation(
-                        cur,
-                        params={
-                            "owner_id": owner_id,
-                            "sales_order_line_id": plan["line_id"],
-                            "batch_id": plan["batch_id"],
-                            "allocated_quantity": plan["quantity"],
-                            "unit_cost": unit_cost,
-                        },
-                    )
-                    alloc_id = str(alloc["id"])
-                    append_movement(
-                        cur,
-                        owner_id=owner_id,
-                        batch_id=plan["batch_id"],
-                        kind="sale",
-                        signed_quantity=-plan["quantity"],
-                        reference_type="sale_allocation",
-                        reference_id=alloc_id,
-                    )
-                    inserted_allocs.append(alloc)
+                inserted_allocs = _persist_allocations_and_sale_movements(
+                    cur, owner_id=owner_id, planned=planned
+                )
 
                 updated_header = mark_sales_order_committed(
                     cur, params={"id": so_id, "owner_id": owner_id}

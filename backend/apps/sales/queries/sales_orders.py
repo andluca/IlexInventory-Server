@@ -145,6 +145,44 @@ def delete_sales_order(cur, *, params: dict) -> None:
     )
 
 
+def _build_sales_orders_where(params: dict) -> tuple[list[str], dict]:
+    """Build WHERE clause parts + bind params for list_sales_orders filters."""
+    where_parts = ["so.owner_id = %(owner_id)s"]
+    bind: dict = {"owner_id": params["owner_id"]}
+
+    if params.get("status") is not None:
+        where_parts.append("so.status = %(status)s")
+        bind["status"] = params["status"]
+
+    if params.get("voided") is not None:
+        where_parts.append(
+            "so.voided_at IS NOT NULL" if params["voided"] else "so.voided_at IS NULL"
+        )
+
+    if params.get("search") is not None:
+        where_parts.append("so.customer_name ILIKE %(search)s")
+        bind["search"] = f"%{params['search']}%"
+
+    if params.get("date_from") is not None:
+        where_parts.append("so.created_at >= %(date_from)s")
+        bind["date_from"] = params["date_from"]
+
+    if params.get("date_to") is not None:
+        where_parts.append("so.created_at <= %(date_to)s")
+        bind["date_to"] = params["date_to"]
+
+    decoded = decode_cursor(params.get("cursor"))
+    if decoded is not None:
+        cursor_id, cursor_ts = decoded
+        where_parts.append(
+            "(so.created_at, so.id::text) < (%(cursor_ts)s, %(cursor_id)s)"
+        )
+        bind["cursor_ts"] = cursor_ts
+        bind["cursor_id"] = str(cursor_id)
+
+    return where_parts, bind
+
+
 @scoped
 def list_sales_orders(cur, *, params: dict) -> tuple[list[dict], str | None]:
     """Cursor-paginated SELECT with optional filters.
@@ -163,41 +201,7 @@ def list_sales_orders(cur, *, params: dict) -> tuple[list[dict], str | None]:
 
     Returns (rows, next_cursor_or_None).
     """
-    where_parts = ["so.owner_id = %(owner_id)s"]
-    query_params: dict = {"owner_id": params["owner_id"]}
-
-    if params.get("status") is not None:
-        where_parts.append("so.status = %(status)s")
-        query_params["status"] = params["status"]
-
-    if params.get("voided") is not None:
-        if params["voided"]:
-            where_parts.append("so.voided_at IS NOT NULL")
-        else:
-            where_parts.append("so.voided_at IS NULL")
-
-    if params.get("search") is not None:
-        where_parts.append("so.customer_name ILIKE %(search)s")
-        query_params["search"] = f"%{params['search']}%"
-
-    if params.get("date_from") is not None:
-        where_parts.append("so.created_at >= %(date_from)s")
-        query_params["date_from"] = params["date_from"]
-
-    if params.get("date_to") is not None:
-        where_parts.append("so.created_at <= %(date_to)s")
-        query_params["date_to"] = params["date_to"]
-
-    decoded = decode_cursor(params.get("cursor"))
-    if decoded is not None:
-        cursor_id, cursor_ts = decoded
-        where_parts.append(
-            "(so.created_at, so.id::text) < (%(cursor_ts)s, %(cursor_id)s)"
-        )
-        query_params["cursor_ts"] = cursor_ts
-        query_params["cursor_id"] = str(cursor_id)
-
-    where_sql = " AND ".join(where_parts)
+    where_parts, query_params = _build_sales_orders_where(params)
     limit = params.get("limit", 50)
     query_params["limit"] = limit + 1
 
@@ -205,7 +209,7 @@ def list_sales_orders(cur, *, params: dict) -> tuple[list[dict], str | None]:
         f"""
         SELECT so.*
           FROM sales_orders so
-         WHERE {where_sql}
+         WHERE {" AND ".join(where_parts)}
          ORDER BY so.created_at DESC, so.id DESC
          LIMIT %(limit)s
         """,
