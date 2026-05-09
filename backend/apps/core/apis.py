@@ -17,6 +17,8 @@ import logging
 
 import psycopg
 from django.conf import settings
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import ensure_csrf_cookie
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
@@ -107,12 +109,13 @@ class HealthView(APIView):
 # ---------------------------------------------------------------------------
 
 
+@method_decorator(ensure_csrf_cookie, name="dispatch")
 class SignupView(APIView):
     """Create a new account and log in immediately.
 
-    CSRF-exempt: client cannot have a CSRF token before first login.
-    Achieved by setting authentication_classes=[] which disables DRF's
-    SessionAuthentication CSRF enforcement.
+    CSRF-exempt for the inbound request (no token possible pre-signup);
+    sets the csrftoken cookie on the response so subsequent mutations
+    have a token to echo back via X-CSRFToken.
     """
 
     authentication_classes = []
@@ -146,10 +149,13 @@ class SignupView(APIView):
         return Response({"user": UserResponse(user).data}, status=status.HTTP_200_OK)
 
 
+@method_decorator(ensure_csrf_cookie, name="dispatch")
 class LoginView(APIView):
     """Authenticate an existing user and set session cookie.
 
-    CSRF-exempt: same reasoning as SignupView.
+    CSRF-exempt for the inbound request (no token possible pre-login);
+    sets the csrftoken cookie on the response so subsequent mutations
+    have a token to echo back via X-CSRFToken.
     """
 
     authentication_classes = []
@@ -201,10 +207,13 @@ class LogoutView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+@method_decorator(ensure_csrf_cookie, name="dispatch")
 class MeView(APIView):
     """Return the currently authenticated user.
 
     Returns 401 when no session is present (IsAuthenticated default).
+    Refreshes the csrftoken cookie on every call so a long-lived session
+    can recover from a missing/stale token by re-bootstrapping.
     """
 
     permission_classes = [IsAuthenticated]
