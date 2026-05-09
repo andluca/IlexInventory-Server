@@ -61,6 +61,43 @@ def on_hand_for_batch(cur, *, params: dict) -> object:
     return row[0]
 
 
+def _build_movements_where(params: dict) -> tuple[list[str], dict, bool]:
+    """Build (where_parts, bind_params, needs_batch_join) for list_movements filters."""
+    where_parts = ["m.owner_id = %(owner_id)s"]
+    bind: dict = {"owner_id": params["owner_id"]}
+
+    if params.get("batch_id") is not None:
+        where_parts.append("m.batch_id = %(batch_id)s")
+        bind["batch_id"] = params["batch_id"]
+
+    if params.get("product_id") is not None:
+        where_parts.append("b.product_id = %(product_id)s")
+        bind["product_id"] = params["product_id"]
+
+    if params.get("kind") is not None:
+        where_parts.append("m.kind = %(kind)s")
+        bind["kind"] = params["kind"]
+
+    if params.get("date_from") is not None:
+        where_parts.append("m.created_at >= %(date_from)s")
+        bind["date_from"] = params["date_from"]
+
+    if params.get("date_to") is not None:
+        where_parts.append("m.created_at <= %(date_to)s")
+        bind["date_to"] = params["date_to"]
+
+    decoded = decode_cursor(params.get("cursor"))
+    if decoded is not None:
+        cursor_id, cursor_ts = decoded
+        where_parts.append(
+            "(m.created_at, m.id::text) < (%(cursor_ts)s, %(cursor_id)s)"
+        )
+        bind["cursor_ts"] = cursor_ts
+        bind["cursor_id"] = str(cursor_id)
+
+    return where_parts, bind, params.get("product_id") is not None
+
+
 @scoped
 def list_movements(cur, *, params: dict) -> tuple[list[dict], str | None]:
     """Cursor-paginated SELECT with optional filters.
@@ -79,49 +116,13 @@ def list_movements(cur, *, params: dict) -> tuple[list[dict], str | None]:
 
     Returns (rows, next_cursor_or_None).
     """
-    where_parts = ["m.owner_id = %(owner_id)s"]
-    query_params: dict = {"owner_id": params["owner_id"]}
-
-    if params.get("batch_id") is not None:
-        where_parts.append("m.batch_id = %(batch_id)s")
-        query_params["batch_id"] = params["batch_id"]
-
-    if params.get("product_id") is not None:
-        where_parts.append("b.product_id = %(product_id)s")
-        query_params["product_id"] = params["product_id"]
-
-    if params.get("kind") is not None:
-        where_parts.append("m.kind = %(kind)s")
-        query_params["kind"] = params["kind"]
-
-    if params.get("date_from") is not None:
-        where_parts.append("m.created_at >= %(date_from)s")
-        query_params["date_from"] = params["date_from"]
-
-    if params.get("date_to") is not None:
-        where_parts.append("m.created_at <= %(date_to)s")
-        query_params["date_to"] = params["date_to"]
-
-    # Cursor pagination: WHERE (created_at, id) < (cursor_ts, cursor_id)
-    decoded = decode_cursor(params.get("cursor"))
-    if decoded is not None:
-        cursor_id, cursor_ts = decoded
-        where_parts.append(
-            "(m.created_at, m.id::text) < (%(cursor_ts)s, %(cursor_id)s)"
-        )
-        query_params["cursor_ts"] = cursor_ts
-        query_params["cursor_id"] = str(cursor_id)
-
-    needs_batch_join = params.get("product_id") is not None
+    where_parts, query_params, needs_batch_join = _build_movements_where(params)
     join_clause = (
         "JOIN batches b ON b.id = m.batch_id AND b.owner_id = m.owner_id"
         if needs_batch_join
         else ""
     )
-    where_sql = " AND ".join(where_parts)
-
     limit = params.get("limit", 50)
-    # Fetch one extra row to detect whether a next page exists.
     query_params["limit"] = limit + 1
 
     cur.execute(
@@ -129,7 +130,7 @@ def list_movements(cur, *, params: dict) -> tuple[list[dict], str | None]:
         SELECT m.*
           FROM stock_movements m
           {join_clause}
-         WHERE {where_sql}
+         WHERE {" AND ".join(where_parts)}
          ORDER BY m.created_at DESC, m.id DESC
          LIMIT %(limit)s
         """,

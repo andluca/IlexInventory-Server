@@ -295,6 +295,41 @@ def create_manual_batch(
     return _row_to_batch(batch)
 
 
+def _resolve_metadata_diff(
+    existing: dict,
+    *,
+    batch_code: str | None,
+    expiration_date: date | None,
+    clear_expiration: bool,
+) -> tuple[str, date | None, list[str]]:
+    """Compute (new_code, new_expiry, change_notes) given the patch inputs.
+
+    change_notes is empty when nothing actually changed (idempotent path).
+    """
+    new_code = batch_code if batch_code is not None else existing["batch_code"]
+    if clear_expiration:
+        new_expiry = None
+    elif expiration_date is not None:
+        new_expiry = expiration_date
+    else:
+        new_expiry = existing["expiration_date"]
+
+    changed: list[str] = []
+    if new_code != existing["batch_code"]:
+        changed.append(f"batch_code: {existing['batch_code']!r} → {new_code!r}")
+    old_expiry = existing["expiration_date"]
+    old_expiry_str = (
+        old_expiry.isoformat() if hasattr(old_expiry, "isoformat") else str(old_expiry)
+    )
+    new_expiry_str = (
+        new_expiry.isoformat() if hasattr(new_expiry, "isoformat") else str(new_expiry)
+    )
+    if str(new_expiry) != str(existing["expiration_date"]):
+        changed.append(f"expiration_date: {old_expiry_str!r} → {new_expiry_str!r}")
+
+    return new_code, new_expiry, changed
+
+
 def update_batch_metadata(
     *,
     owner_id: int,
@@ -320,49 +355,34 @@ def update_batch_metadata(
                 if existing is None:
                     raise BatchNotFound(detail=f"Batch {batch_id} not found.")
 
-                new_code = batch_code if batch_code is not None else existing["batch_code"]
-                if clear_expiration:
-                    new_expiry = None
-                elif expiration_date is not None:
-                    new_expiry = expiration_date
-                else:
-                    new_expiry = existing["expiration_date"]
-
-                # Detect actual changes
-                changed: list[str] = []
-                if new_code != existing["batch_code"]:
-                    changed.append(f"batch_code: {existing['batch_code']!r} → {new_code!r}")
-                old_expiry = existing["expiration_date"]
-                if hasattr(old_expiry, "isoformat"):
-                    old_expiry_str = old_expiry.isoformat()
-                else:
-                    old_expiry_str = str(old_expiry)
-                new_expiry_str = new_expiry.isoformat() if hasattr(new_expiry, "isoformat") else str(new_expiry)
-                if str(new_expiry) != str(existing["expiration_date"]):
-                    changed.append(f"expiration_date: {old_expiry_str!r} → {new_expiry_str!r}")
+                new_code, new_expiry, changed = _resolve_metadata_diff(
+                    existing,
+                    batch_code=batch_code,
+                    expiration_date=expiration_date,
+                    clear_expiration=clear_expiration,
+                )
 
                 if not changed:
-                    # No actual change — idempotent, skip writes
                     conn.rollback()
                     return _row_to_batch({**existing, "on_hand": Decimal("0")})
 
                 updated = _update_batch_metadata_query(
-                    cur, params={
+                    cur,
+                    params={
                         "id": batch_id,
                         "owner_id": owner_id,
                         "batch_code": new_code,
                         "expiration_date": new_expiry,
-                    }
+                    },
                 )
-                insert_movement(cur, params={
-                    "owner_id": owner_id,
-                    "batch_id": batch_id,
-                    "kind": "metadata_correction",
-                    "signed_quantity": Decimal("0"),
-                    "notes": "; ".join(changed),
-                    "reference_type": None,
-                    "reference_id": None,
-                })
+                append_movement(
+                    cur,
+                    owner_id=owner_id,
+                    batch_id=batch_id,
+                    kind="metadata_correction",
+                    signed_quantity=Decimal("0"),
+                    notes="; ".join(changed),
+                )
             conn.commit()
         except BatchNotFound:
             conn.rollback()
