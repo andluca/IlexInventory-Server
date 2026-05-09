@@ -9,6 +9,8 @@ Module-top imports only (ilex-discipline invariant #6).
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 import psycopg
 from django.conf import settings
 
@@ -32,3 +34,21 @@ def row_to_dict(cur, row) -> dict:
     if row is None:
         return {}
     return {d.name: row[i] for i, d in enumerate(cur.description)}
+
+
+@contextmanager
+def savepoint_rollback(cur, name: str):
+    """SAVEPOINT scope that ALWAYS rolls back on exit (preview/dry-run pattern).
+
+    Used when a service needs to run a mutating computation purely to inspect
+    its side-effects, without persisting. The savepoint name is interpolated
+    into the SQL (psycopg cannot bind savepoint identifiers), so it must be
+    a valid Python identifier; ValueError is raised otherwise.
+    """
+    if not name.isidentifier():
+        raise ValueError(f"invalid savepoint name: {name!r}")
+    cur.execute(f"SAVEPOINT {name}")
+    try:
+        yield
+    finally:
+        cur.execute(f"ROLLBACK TO SAVEPOINT {name}")

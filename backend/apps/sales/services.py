@@ -18,7 +18,7 @@ from typing import Any
 import psycopg
 import psycopg.errors
 
-from apps.core.db import connect as _connect
+from apps.core.db import connect as _connect, savepoint_rollback
 
 from apps.inventory.queries.batches import list_eligible_for_fefo, select_batch_by_id as select_batch_with_on_hand
 from apps.inventory.queries.movements import insert_movement
@@ -700,11 +700,8 @@ def preview_so_allocations(
                     cur, params={"sales_order_id": so_id, "owner_id": owner_id}
                 )
 
-                cur.execute("SAVEPOINT preview")
-                try:
+                with savepoint_rollback(cur, "preview"):
                     planned = _fefo_walk(cur, owner_id=owner_id, lines=lines)
-                finally:
-                    cur.execute("ROLLBACK TO SAVEPOINT preview")
 
         except (SalesOrderNotFound, SalesOrderNotDraft, InsufficientStock):
             conn.rollback()
