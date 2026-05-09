@@ -17,8 +17,11 @@ python manage.py migrate --noinput
 # Step 3: apply pending SQL migrations (idempotent on re-deploy).
 python manage.py migrate_sql
 
-# Step 3: hand off to gunicorn — becomes PID 1.
+# Step 4: hand off to gunicorn — becomes PID 1.
+# wsgi.py lives in backend/, but manage.py is at /app — gunicorn doesn't go
+# through manage.py, so add backend/ to PYTHONPATH explicitly.
 exec gunicorn wsgi:application \
+    --pythonpath /app/backend \
     --bind "0.0.0.0:${PORT:-8000}" \
     --workers "${GUNICORN_WORKERS:-3}" \
     --access-logfile - \
