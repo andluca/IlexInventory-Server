@@ -41,12 +41,13 @@ from apps.inventory.serializers import (
 )
 from apps.inventory.services import (
     create_manual_batch,
-    record_movement,
+    get_recall_report_for_batch,
     recall_batch,
+    record_movement,
+    stream_recall_report_for_batch,
     un_recall_batch,
     update_batch_metadata,
 )
-from apps.sales.selectors import list_recall_report_for_batch, stream_recall_report_for_batch
 from apps.sales.serializers import RecallReportResponse
 
 
@@ -403,7 +404,7 @@ class BatchRecallReportApi(APIView):
         limit = int(request.query_params.get("limit", 50))
         offset = int(request.query_params.get("offset", 0))
 
-        result = list_recall_report_for_batch(
+        result = get_recall_report_for_batch(
             owner_id=owner_id,
             batch_id=batch_id,
             limit=limit,

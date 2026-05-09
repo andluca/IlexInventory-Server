@@ -11,6 +11,7 @@ Rules:
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -42,6 +43,10 @@ from apps.inventory.queries.movements import (
     on_hand_for_batch,
 )
 from apps.inventory.types import BatchRow, MovementRow, ReceiveLine
+from apps.sales.selectors import (
+    list_recall_report_for_batch as _sales_list_recall_report,
+    stream_recall_report_for_batch as _sales_stream_recall_report,
+)
 
 # Kinds that callers of record_movement (the public endpoint) may request.
 _PUBLIC_MOVEMENT_KINDS = {"adjustment", "write_off"}
@@ -122,6 +127,32 @@ def append_movement(
             "reference_id": reference_id,
         },
     )
+
+
+# --------------------------------------------------------------------------
+# Cross-app read wrappers — recall reports.
+#
+# Recall report data lives in apps.sales (sale_allocations + v_recall_report)
+# but the endpoint is mounted on /batches/{id}/recall-report (inventory URL).
+# These wrappers make inventory.apis the only consumer of inventory.services
+# and keep the cross-app boundary at the service layer.
+# --------------------------------------------------------------------------
+
+
+def get_recall_report_for_batch(
+    *, owner_id: int, batch_id: str, limit: int = 50, offset: int = 0
+) -> dict:
+    """Offset-paginated recall report for a batch."""
+    return _sales_list_recall_report(
+        owner_id=owner_id, batch_id=batch_id, limit=limit, offset=offset
+    )
+
+
+def stream_recall_report_for_batch(
+    *, owner_id: int, batch_id: str
+) -> Generator[dict, None, None]:
+    """Stream all recall-report rows for a batch (CSV export path)."""
+    yield from _sales_stream_recall_report(owner_id=owner_id, batch_id=batch_id)
 
 
 def _insert_batch_with_receipt(
