@@ -148,6 +148,43 @@ def create_purchase_order_draft(
     return _row_to_po(header, inserted_lines)
 
 
+def _load_existing_po_draft_or_raise(
+    cur, *, owner_id: int, po_id: UUID, po_id_str: str
+) -> dict:
+    """Load a PO and assert it's a draft for this owner. Raise on miss/non-draft."""
+    existing = select_purchase_order_by_id(
+        cur, params={"id": po_id_str, "owner_id": owner_id}
+    )
+    if existing is None:
+        raise PurchaseOrderNotFound(detail=f"Purchase order {po_id} not found.")
+    if existing["status"] != "draft":
+        raise PurchaseOrderNotDraft(detail=f"Purchase order {po_id} is not a draft.")
+    return existing
+
+
+def _replace_po_draft_lines(
+    cur, *, owner_id: int, po_id_str: str, lines: list[NewLine]
+) -> list[dict]:
+    """DELETE all PO lines and INSERT the replacement set. Returns inserted rows."""
+    delete_lines_for_purchase_order(
+        cur, params={"purchase_order_id": po_id_str, "owner_id": owner_id}
+    )
+    inserted: list[dict] = []
+    for line in lines:
+        ln = insert_purchase_order_line(
+            cur,
+            params={
+                "owner_id": owner_id,
+                "purchase_order_id": po_id_str,
+                "product_id": str(line["product_id"]),
+                "quantity": line["quantity"],
+                "unit_cost": line["unit_cost"],
+            },
+        )
+        inserted.append(ln)
+    return inserted
+
+
 def update_purchase_order_draft(
     *,
     owner_id: int,
@@ -175,19 +212,10 @@ def update_purchase_order_draft(
     with _connect() as conn:
         try:
             with conn.cursor() as cur:
-                existing = select_purchase_order_by_id(
-                    cur, params={"id": po_id_str, "owner_id": owner_id}
+                _load_existing_po_draft_or_raise(
+                    cur, owner_id=owner_id, po_id=po_id, po_id_str=po_id_str
                 )
-                if existing is None:
-                    raise PurchaseOrderNotFound(
-                        detail=f"Purchase order {po_id} not found."
-                    )
-                if existing["status"] != "draft":
-                    raise PurchaseOrderNotDraft(
-                        detail=f"Purchase order {po_id} is not a draft."
-                    )
 
-                # Build update params — only include non-None fields
                 update_params: dict = {"id": po_id_str, "owner_id": owner_id}
                 if supplier_name is not None:
                     update_params["supplier_name"] = supplier_name
@@ -197,23 +225,9 @@ def update_purchase_order_draft(
                 header = update_purchase_order_header(cur, params=update_params)
 
                 if lines is not None:
-                    delete_lines_for_purchase_order(
-                        cur,
-                        params={"purchase_order_id": po_id_str, "owner_id": owner_id},
+                    inserted_lines = _replace_po_draft_lines(
+                        cur, owner_id=owner_id, po_id_str=po_id_str, lines=lines
                     )
-                    inserted_lines = []
-                    for line in lines:
-                        ln = insert_purchase_order_line(
-                            cur,
-                            params={
-                                "owner_id": owner_id,
-                                "purchase_order_id": po_id_str,
-                                "product_id": str(line["product_id"]),
-                                "quantity": line["quantity"],
-                                "unit_cost": line["unit_cost"],
-                            },
-                        )
-                        inserted_lines.append(ln)
                 else:
                     inserted_lines = select_lines_for_purchase_order(
                         cur,
@@ -271,6 +285,40 @@ def delete_purchase_order_draft(
             raise
 
 
+def _assert_line_metadata_matches(
+    db_lines: list[dict], line_metadata: list[ReceiveLineMeta]
+) -> None:
+    """Raise ReceiveLinesMismatch unless line_metadata IDs match db_lines exactly."""
+    db_line_ids = {str(ln["id"]) for ln in db_lines}
+    meta_line_ids = {str(m["line_id"]) for m in line_metadata}
+    if db_line_ids != meta_line_ids:
+        raise ReceiveLinesMismatch(
+            detail=(
+                "line_metadata line_ids must match the PO's lines exactly. "
+                f"Expected {sorted(db_line_ids)}, got {sorted(meta_line_ids)}."
+            )
+        )
+
+
+def _build_receipt_lines(
+    db_lines: list[dict], line_metadata: list[ReceiveLineMeta]
+) -> list[dict]:
+    """Project (db_lines, line_metadata) into the receipt-line dicts inventory expects."""
+    db_line_by_id = {str(ln["id"]): ln for ln in db_lines}
+    return [
+        {
+            "line_id": str(m["line_id"]),
+            "batch_code": m["batch_code"],
+            "expiration_date": m.get("expiration_date"),
+            "product_id": str(db_line_by_id[str(m["line_id"])]["product_id"]),
+            "quantity": db_line_by_id[str(m["line_id"])]["quantity"],
+            "unit_cost": db_line_by_id[str(m["line_id"])]["unit_cost"],
+            "purchase_order_line_id": str(m["line_id"]),
+        }
+        for m in line_metadata
+    ]
+
+
 def receive_purchase_order(
     *,
     owner_id: int,
@@ -293,7 +341,6 @@ def receive_purchase_order(
     with _connect() as conn:
         try:
             with conn.cursor() as cur:
-                # Lock header + lines together for the transition
                 header = select_purchase_order_for_update(
                     cur, params={"id": po_id_str, "owner_id": owner_id}
                 )
@@ -309,19 +356,8 @@ def receive_purchase_order(
                 db_lines = select_lines_for_update(
                     cur, params={"purchase_order_id": po_id_str, "owner_id": owner_id}
                 )
+                _assert_line_metadata_matches(db_lines, line_metadata)
 
-                # Validate that line_metadata matches the PO's lines exactly (1:1)
-                db_line_ids = {str(ln["id"]) for ln in db_lines}
-                meta_line_ids = {str(m["line_id"]) for m in line_metadata}
-                if db_line_ids != meta_line_ids:
-                    raise ReceiveLinesMismatch(
-                        detail=(
-                            "line_metadata line_ids must match the PO's lines exactly. "
-                            f"Expected {sorted(db_line_ids)}, got {sorted(meta_line_ids)}."
-                        )
-                    )
-
-                # Transition header to received
                 updated_header = mark_purchase_order_received(
                     cur, params={"id": po_id_str, "owner_id": owner_id}
                 )
@@ -331,28 +367,9 @@ def receive_purchase_order(
             conn.rollback()
             raise
 
-    # Delegate batch + movement creation to apps.inventory
-    # ILEX-006 fills the real body; signature is preserved from ILEX-005.
     create_receipt_batches(
         owner_id=owner_id,
-        lines=[
-            {
-                "line_id": str(m["line_id"]),
-                "batch_code": m["batch_code"],
-                "expiration_date": m.get("expiration_date"),
-                "product_id": next(
-                    str(ln["product_id"]) for ln in db_lines if str(ln["id"]) == str(m["line_id"])
-                ),
-                "quantity": next(
-                    ln["quantity"] for ln in db_lines if str(ln["id"]) == str(m["line_id"])
-                ),
-                "unit_cost": next(
-                    ln["unit_cost"] for ln in db_lines if str(ln["id"]) == str(m["line_id"])
-                ),
-                "purchase_order_line_id": str(m["line_id"]),
-            }
-            for m in line_metadata
-        ],
+        lines=_build_receipt_lines(db_lines, line_metadata),
     )
 
     return _row_to_po(updated_header, db_lines)
