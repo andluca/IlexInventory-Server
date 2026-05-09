@@ -166,15 +166,15 @@ Layering rules (full set in [`.claude/skills/ilex-discipline/SKILL.md`](.claude/
 | [`docs/decisions.md`](docs/decisions.md) | 15 numbered architectural decisions (D0–D14), each with rationale + rejected alternatives |
 | [`docs/specs/SPEC.md`](docs/specs/SPEC.md) | Full project specification: foundation, features per app, validation gates, phases, decisions table |
 | [`docs/endpoints.md`](docs/endpoints.md) | Endpoint catalog (36 endpoints, by app) with idempotency + pagination columns |
-| [`docs/issues/`](docs/issues/) and [`.epic/issues/`](.epic/issues/) | Implementation issue breakdown — 12 v1 MVP issues. The four Phase 3 agent issues are present but cancelled. |
-| [`docs/agent.md`](docs/agent.md) | "Ask Ilex" agent reference — runtime narrative + three-mode design, kept for reference (not built). |
-| [`docs/specs/agent.md`](docs/specs/agent.md) | Agent implementation spec — kept for reference (cancelled scope). |
+| [`docs/issues/`](docs/issues/) | Implementation issue ledger — 12 done v1 MVP issues + 4 deferred Phase 3 issues. Start at [`CHANGELOG.md`](docs/issues/CHANGELOG.md). |
+| [`docs/agent.md`](docs/agent.md) | "Ask Ilex" agent reference — runtime narrative + three-mode design, deferred to Phase 3 (post-v1). |
+| [`docs/specs/agent.md`](docs/specs/agent.md) | Agent implementation spec — deferred to Phase 3. |
 
 ---
 
 ## Implementation status
 
-12 issues shipped end-to-end (see [`.epic/issues/`](.epic/issues/) and [`docs/issues/status.md`](docs/issues/status.md)). Each ships a complete vertical: schema → queries → services → API → tests.
+12 issues shipped end-to-end (see [`docs/issues/CHANGELOG.md`](docs/issues/CHANGELOG.md) for the commit-to-issue map). Each ships a complete vertical: schema → queries → services → API → tests.
 
 **v1 MVP — complete** (12 issues):
 
@@ -191,9 +191,9 @@ Layering rules (full set in [`.claude/skills/ilex-discipline/SKILL.md`](.claude/
 | 009 | CSV exports + `0009_indexes` | ✅ done |
 | 010 | OpenAPI integration + frontend type generation | ✅ done |
 | 011 | Deploy (Docker, GitHub Actions CI, Fly.io) | ✅ done |
-| 016 | Polish pass — bug fixes + DRY extraction (this issue closes the v1) | ✅ done |
+| 016 | Polish pass — bug fixes + DRY extraction (closes the v1) | ✅ done |
 
-**Cancelled (post-v1)**: ILEX-012 through ILEX-015 (the "Ask Ilex" agent — Phase 3) are out of scope. The agent specification ([`docs/specs/agent.md`](docs/specs/agent.md)) and runtime walkthrough ([`docs/agent.md`](docs/agent.md)) remain in the repo as a design reference, but no agent code ships.
+**Deferred (Phase 3)**: ILEX-012 through ILEX-015 specify the "Ask Ilex" agent — out of v1 scope, postponed to a later phase. The schema commitments that make Phase 3 buildable later (read-only role substrate, owner-projecting `v_*` views, append-only ledger, immutable allocations) all landed in v1. Specs at [`docs/specs/agent.md`](docs/specs/agent.md) and the user-facing runtime narrative at [`docs/agent.md`](docs/agent.md).
 
 ---
 

@@ -1,12 +1,4 @@
----
-id: ILEX-015
-github_id: null
-status: cancelled
-assignee: null
-state: Cancelled
-type: item
-depends_on: [ILEX-014]
----
+> **Status:** ⏸ Deferred — not in v1. Implementation specs live in [`docs/specs/agent.md`](../specs/agent.md) and [`docs/agent.md`](../agent.md). Reactivate by promoting to a regular issue when Phase 3 (Ask Ilex agent) starts.
 
 # ILEX-015 Add onboarding skill and empty-state integration
 

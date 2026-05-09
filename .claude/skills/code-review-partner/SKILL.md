@@ -202,7 +202,7 @@ Skip when there are no auto-fixable findings.]
 
 ## Important
 
-- **Diff scope**: review only the issue's changes. Default: `git diff <last-completed-commit>..HEAD --stat` then walk each file. If invoked with `--issue ILEX-NNN`, infer the diff base by reading `.epic/issues/ILEX-NNN-*.md` `depends_on` (commit for the parent issue is the base).
+- **Diff scope**: review only the changes the user asks about. Default: `git diff <last-completed-commit>..HEAD --stat` then walk each file. For a per-issue review, the issue's predecessor commit is the diff base — see [`docs/issues/CHANGELOG.md`](../../../docs/issues/CHANGELOG.md) for the issue-to-commit map.
 - **Don't relitigate locked decisions**. D0–D14 are settled; flag the violation, don't redebate the rule.
 - **Verify before claiming clean**. Run pytest, run the discipline greps from `ilex-discipline`'s "CI gates" section, run `find` for function size. The report's metrics block must come from real commands, not reasoning.
 - **Commit-ready output**. After fixes are applied and pytest is green, the report ends with the suggested Conventional Commit message and a `🟢 ready to commit` marker. If anything is red, end with `🔴 do not commit — <reason>`.

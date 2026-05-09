@@ -1,5 +1,7 @@
 # Ask Ilex — the agent that explains your inventory
 
+> **Status:** ⏸ Deferred — Phase 3, not implemented in v1. The schema commitments that make this buildable (read-only role substrate, owner-projecting `v_*` views, append-only ledger, immutable allocations) all shipped in v1. To activate, see [`docs/issues/012`](issues/012-setup-agent-foundation-and-readonly-role.md) → [`015`](issues/015-add-onboarding-skill-and-empty-state-integration.md).
+
 Ask Ilex is an in-product chat agent for F&B brand owners. It reads your stock ledger, drafts sales orders, and — most importantly — **explains causal stories no dashboard can show you**: why margin moved, what the recall actually traced, where stock disappeared this week.
 
 It is the narrative differentiator. Several of the system's foundational decisions — the append-only `stock_movements` ledger (D1), immutable `sale_allocations` so cost layers stay reconstructable (D8), allowlisted read-only views, owner-isolated by composite FK (D4) — exist partly to make the agent's **Explain mode** trustworthy.

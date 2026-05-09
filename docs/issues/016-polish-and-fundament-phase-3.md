@@ -1,12 +1,4 @@
----
-id: ILEX-016
-github_id: null
-status: completed
-assignee: null
-state: Done
-type: item
-depends_on: [ILEX-011]
----
+> **Status:** ✅ Done — shipped in [`6fbb12d`](../../commit/6fbb12d) as `fix(api): close P0 bugs (Pillar 1) + refactor 9be0d12 + docs 4d502aa (ILEX-016)`.
 
 # ILEX-016 Polish v1 MVP and fundament Phase 3 (agent)
 

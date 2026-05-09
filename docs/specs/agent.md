@@ -1,5 +1,7 @@
 # Spec: Ask Ilex Agent (Phase 3)
 
+> **Status:** ⏸ Deferred — not implemented in v1. The v1 MVP shipped without the agent endpoint, but every schema commitment this spec depends on (read-only role substrate, owner-projecting `v_*` views, append-only `stock_movements`, immutable `sale_allocations`) is locked. To activate, follow the four-issue chain in [`docs/issues/012`](../issues/012-setup-agent-foundation-and-readonly-role.md) → [`015`](../issues/015-add-onboarding-skill-and-empty-state-integration.md).
+
 ## Summary
 
 In-product chat agent for F&B brand owners. Three modes: **Query** (read-only SQL against allowlisted views), **Draft** (returns JSON payload, FE submits via the normal API on confirm — never a direct write), **Explain** (composes multiple SQL reads to surface causal narratives across the ledger and cost layers). Implemented with the **Claude Agent SDK** authenticated via a single shared `CLAUDE_CODE_OAUTH_TOKEN` (the dev's Claude Max subscription, take-home scope). One `run_sql` tool against the `ilex_agent_ro` Postgres role; the role has SELECT only on `v_*` views; views self-filter by owner via session GUC. 5s statement timeout, 1000-row cap, no rate limiting v1. SSE streaming. Stateless server — FE holds chat history. Skills loaded natively by the SDK from `apps/agent/skills/`.
