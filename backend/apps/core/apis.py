@@ -17,6 +17,7 @@ import logging
 
 import psycopg
 from django.conf import settings
+from django.middleware.csrf import get_token
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from drf_spectacular.utils import extend_schema, inline_serializer
@@ -146,7 +147,13 @@ class SignupView(APIView):
             body, http_status = to_response(exc)
             return Response(body, status=http_status)
 
-        return Response({"user": UserResponse(user).data}, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "user": UserResponse(user).data,
+                "csrf_token": get_token(request._request),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")
@@ -186,7 +193,13 @@ class LoginView(APIView):
             body, http_status = to_response(exc)
             return Response(body, status=http_status)
 
-        return Response({"user": UserResponse(user).data}, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "user": UserResponse(user).data,
+                "csrf_token": get_token(request._request),
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class LogoutView(APIView):
@@ -224,4 +237,10 @@ class MeView(APIView):
         summary="Return the current authenticated user",
     )
     def get(self, request: Request) -> Response:
-        return Response({"user": UserResponse(request.user).data}, status=status.HTTP_200_OK)
+        return Response(
+            {
+                "user": UserResponse(request.user).data,
+                "csrf_token": get_token(request._request),
+            },
+            status=status.HTTP_200_OK,
+        )
