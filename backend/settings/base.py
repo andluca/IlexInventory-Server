@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import urllib.parse
 
+from corsheaders.defaults import default_headers
+
 from settings._env import env
 
 # ---------------------------------------------------------------------------
@@ -115,6 +117,21 @@ USE_TZ = True
 
 CSRF_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_SAMESITE = "Lax"
+
+# ---------------------------------------------------------------------------
+# CORS allow-list — extra request headers
+# ---------------------------------------------------------------------------
+#
+# django-cors-headers' default_headers permits accept / authorization /
+# content-type / user-agent / x-csrftoken / x-requested-with. The FE attaches
+# `Idempotency-Key` on every SPEC §2.5 terminal mutation (commit SO, void SO,
+# receive PO, recall, un-recall, manual batch, write-off, products import),
+# so the browser preflight must see it in Access-Control-Allow-Headers when
+# the FE and BE live on different origins (Netlify ↔ Railway). Without this
+# allowlist entry the browser blocks the actual request before it reaches
+# Django.
+
+CORS_ALLOW_HEADERS = (*default_headers, "idempotency-key")
 
 # ---------------------------------------------------------------------------
 # Auth
