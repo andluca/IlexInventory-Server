@@ -193,6 +193,36 @@ def _insert_batch_with_receipt(
     return batch, movement
 
 
+def attach_receipt_batches(
+    cur,
+    *,
+    owner_id: int,
+    lines: list[ReceiveLine],
+) -> list[BatchRow]:
+    """Insert one batch + one receipt movement per line on the caller's cursor.
+
+    Caller owns the transaction (no connect, commit, or rollback here). Used by
+    procurement.receive_purchase_order to keep the PO header transition and
+    batch creation atomic in a single transaction.
+    """
+    results: list[BatchRow] = []
+    for line in lines:
+        batch, _ = _insert_batch_with_receipt(
+            cur,
+            owner_id=owner_id,
+            product_id=str(line["product_id"]),
+            purchase_order_line_id=str(line["purchase_order_line_id"]),
+            batch_code=line["batch_code"],
+            expiration_date=line.get("expiration_date"),
+            unit_cost=Decimal(str(line["unit_cost"])),
+            quantity=Decimal(str(line["quantity"])),
+            reference_type="purchase_order_line",
+            reference_id=str(line["line_id"]),
+        )
+        results.append(_row_to_batch(batch))
+    return results
+
+
 def create_receipt_batches(
     *,
     owner_id: int,
@@ -200,19 +230,9 @@ def create_receipt_batches(
 ) -> list[BatchRow]:
     """Create one batch per PO line + one receipt movement per batch.
 
-    Procurement calls this AFTER receive_purchase_order commits the PO header
-    transition. We open our own connection.
-
-    For each line: INSERT batch (with purchase_order_line_id set, unit_cost from
-    line) + INSERT receipt movement (kind='receipt', signed_quantity=+line.quantity,
-    reference_type='purchase_order_line', reference_id=line.line_id).
-
-    Wraps all inserts in a single transaction — if any fails, no batches or
-    movements persist.
-
-    Note: procurement already committed the PO header before calling us.
-    If our writes fail, the PO is in 'received' state but has zero batches.
-    This is a known seam from ILEX-005's split. The uniqueness constraint on
+    Standalone entry point for callers that don't already hold a transaction
+    (currently the test suite). Opens its own connection, delegates to
+    attach_receipt_batches, commits. The uniqueness constraint on
     (owner_id, product_id, batch_code) prevents double-receives at DB level.
     """
     if not lines:
@@ -220,26 +240,9 @@ def create_receipt_batches(
 
     with _connect() as conn:
         try:
-            results: list[BatchRow] = []
             with conn.cursor() as cur:
-                for line in lines:
-                    batch, _ = _insert_batch_with_receipt(
-                        cur,
-                        owner_id=owner_id,
-                        product_id=str(line["product_id"]),
-                        purchase_order_line_id=str(line["purchase_order_line_id"]),
-                        batch_code=line["batch_code"],
-                        expiration_date=line.get("expiration_date"),
-                        unit_cost=Decimal(str(line["unit_cost"])),
-                        quantity=Decimal(str(line["quantity"])),
-                        reference_type="purchase_order_line",
-                        reference_id=str(line["line_id"]),
-                    )
-                    results.append(_row_to_batch(batch))
+                results = attach_receipt_batches(cur, owner_id=owner_id, lines=lines)
             conn.commit()
-        except psycopg.errors.ForeignKeyViolation:
-            conn.rollback()
-            raise
         except Exception:
             conn.rollback()
             raise

@@ -216,3 +216,111 @@ def list_purchase_orders(cur, *, params: dict) -> tuple[list[dict], int]:
     cols = [d.name for d in cur.description]
     rows = [dict(zip(cols, row)) for row in cur.fetchall()]
     return rows, total
+
+
+# ---------------------------------------------------------------------------
+# Aggregated reads (header + lines in one SQL statement)
+#
+# Replace the selector-layer N+1 (1 header query + N line queries) with a
+# single statement. Selector callers project the inline `lines` jsonb_agg
+# back to typed dicts via apps.procurement._assemble.row_to_po_aggregated.
+# Services that only need the header continue to use the plain queries
+# above — no Decimal/datetime round-trip overhead for them.
+# ---------------------------------------------------------------------------
+
+_PO_LINES_JSONB_SUBQUERY = """\
+COALESCE((
+  SELECT jsonb_agg(
+           jsonb_build_object(
+             'id',                pol.id::text,
+             'owner_id',          pol.owner_id,
+             'purchase_order_id', pol.purchase_order_id::text,
+             'product_id',        pol.product_id::text,
+             'quantity',          pol.quantity::text,
+             'unit_cost',         pol.unit_cost::text,
+             'created_at',        pol.created_at
+           ) ORDER BY pol.created_at ASC, pol.id ASC
+         )
+    FROM purchase_order_lines pol
+   WHERE pol.purchase_order_id = po.id
+     AND pol.owner_id          = po.owner_id
+), '[]'::jsonb) AS lines
+"""
+
+
+@scoped
+def select_purchase_order_with_lines(cur, *, params: dict) -> dict | None:
+    """SELECT a PO by (id, owner_id) with its lines embedded via jsonb_agg.
+
+    Single statement. Returns None on miss (cross-owner → 404, per D4).
+
+    params keys: id, owner_id
+    """
+    cur.execute(
+        f"""
+        SELECT po.*,
+               {_PO_LINES_JSONB_SUBQUERY}
+          FROM purchase_orders po
+         WHERE po.id = %(id)s AND po.owner_id = %(owner_id)s
+        """,
+        params,
+    )
+    row = cur.fetchone()
+    if row is None:
+        return None
+    return _row_to_dict(cur, row)
+
+
+@scoped
+def list_purchase_orders_with_lines(cur, *, params: dict) -> tuple[list[dict], int]:
+    """Paginated SELECT of POs with lines embedded via jsonb_agg subquery.
+
+    Replaces the N+1 form (1 paginated header query + N line queries). The
+    COUNT(*) for `total` is still a separate statement to keep the
+    pagination contract unchanged.
+
+    params keys: owner_id, status, search, date_from, date_to, limit, offset
+    """
+    where_parts = ["po.owner_id = %(owner_id)s"]
+    query_params: dict = {"owner_id": params["owner_id"]}
+
+    if params.get("status"):
+        where_parts.append("po.status = %(status)s")
+        query_params["status"] = params["status"]
+
+    if params.get("search"):
+        where_parts.append("po.supplier_name ILIKE %(search_pat)s")
+        query_params["search_pat"] = f"%{params['search']}%"
+
+    if params.get("date_from"):
+        where_parts.append("po.created_at >= %(date_from)s")
+        query_params["date_from"] = params["date_from"]
+
+    if params.get("date_to"):
+        where_parts.append("po.created_at <= %(date_to)s")
+        query_params["date_to"] = params["date_to"]
+
+    where_sql = " AND ".join(where_parts)
+
+    cur.execute(
+        f"SELECT COUNT(*) FROM purchase_orders po WHERE {where_sql}",
+        query_params,
+    )
+    total = cur.fetchone()[0]
+
+    query_params["limit"] = params["limit"]
+    query_params["offset"] = params["offset"]
+    cur.execute(
+        f"""
+        SELECT po.*,
+               {_PO_LINES_JSONB_SUBQUERY}
+          FROM purchase_orders po
+         WHERE {where_sql}
+         ORDER BY po.created_at DESC, po.id DESC
+         LIMIT %(limit)s OFFSET %(offset)s
+        """,
+        query_params,
+    )
+    cols = [d.name for d in cur.description]
+    rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+    return rows, total

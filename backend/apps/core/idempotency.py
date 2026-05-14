@@ -5,7 +5,9 @@ Reads the ``Idempotency-Key`` header from the request, looks up
 
   - Cache hit  → return the cached (status, body) without running the view.
   - Cache miss → run the view, then INSERT the (status, body) before returning.
-    Uses ``ON CONFLICT DO NOTHING`` so concurrent retries are race-safe.
+    A transaction-scoped advisory lock keyed by (owner_id, endpoint, key)
+    serializes concurrent requests for the same key, so the view body
+    executes exactly once even under concurrent retries.
   - Missing header → 400 ValidationError.
 
 ``owner_id`` is taken from ``request.user.id``.
@@ -58,77 +60,84 @@ def idempotent(endpoint: str) -> Callable:
                 )
                 return Response(body, status=status)
 
-            owner_id = request.user.id
-            db_url = settings.DATABASE_URL
-
-            # Check for a cached response.
-            cached = _lookup_cache(db_url, owner_id, idempotency_key, endpoint)
-            if cached is not None:
-                cached_status, cached_body = cached
-                return Response(cached_body, status=cached_status)
-
-            # Cache miss — run the view.
-            response = view_method(self_or_view, request, *args, **kwargs)
-
-            # Persist the response before returning (race-safe with ON CONFLICT DO NOTHING).
-            _store_cache(db_url, owner_id, idempotency_key, endpoint, response)
-
-            return response
+            owner_id = int(request.user.id)
+            return _run_with_idempotency(
+                view_method=view_method,
+                self_or_view=self_or_view,
+                request=request,
+                args=args,
+                kwargs=kwargs,
+                owner_id=owner_id,
+                idempotency_key=idempotency_key,
+                endpoint=endpoint,
+            )
 
         return wrapper
 
     return decorator
 
 
-def _lookup_cache(
-    db_url: str,
-    owner_id: Any,
-    key: str,
+def _run_with_idempotency(
+    *,
+    view_method: Callable,
+    self_or_view: Any,
+    request: Request,
+    args: tuple,
+    kwargs: dict,
+    owner_id: int,
+    idempotency_key: str,
     endpoint: str,
-) -> tuple[int, Any] | None:
-    """Return (status, body) from idempotency_keys, or None on cache miss."""
-    try:
-        with psycopg.connect(db_url, autocommit=True) as conn:
-            with conn.cursor() as cur:
-                return cache_lookup(
-                    cur, owner_id=int(owner_id), key=key, endpoint=endpoint
-                )
-    except psycopg.Error:
-        # Cache lookup failure: treat as miss so the view can still execute.
-        return None
+) -> Response:
+    """Atomic lookup → (view → insert) cycle under a per-key advisory lock.
 
+    The lock is transaction-scoped, so the lookup and the subsequent
+    insert (if any) run inside one transaction on one connection. Concurrent
+    requests for the same (owner_id, endpoint, idempotency_key) block on the
+    lock; the loser unblocks AFTER the winner commits, finds the cached
+    response, and returns it without re-running the view.
 
-def _store_cache(
-    db_url: str,
-    owner_id: Any,
-    key: str,
-    endpoint: str,
-    response: Response,
-) -> None:
-    """Persist (status, body) in idempotency_keys with ON CONFLICT DO NOTHING.
-
-    The body is taken from the **rendered** response so DRF's renderer has
-    already serialized Decimal/datetime/UUID into strings. Caching
-    `response.data` directly raises TypeError on those types and was a
-    silent no-op before — see ILEX-016 §1.3.
+    Lock acquisition failure or any other psycopg error falls back to
+    executing the view without idempotency protection — matches the previous
+    "permissive on cache failure" behaviour to avoid blocking writes when
+    the cache table is unreachable.
     """
-    body_text = _rendered_body_text(response)
+    db_url = settings.DATABASE_URL
+    lock_payload = f"{owner_id}:{endpoint}:{idempotency_key}"
 
     try:
-        with psycopg.connect(db_url, autocommit=True) as conn:
+        with psycopg.connect(db_url) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (lock_payload,),
+                )
+
+                cached = cache_lookup(
+                    cur, owner_id=owner_id, key=idempotency_key, endpoint=endpoint
+                )
+                if cached is not None:
+                    conn.commit()
+                    cached_status, cached_body = cached
+                    return Response(cached_body, status=cached_status)
+
+            response = view_method(self_or_view, request, *args, **kwargs)
+            body_text = _rendered_body_text(response)
+
             with conn.cursor() as cur:
                 cache_insert(
                     cur,
-                    owner_id=int(owner_id),
-                    key=key,
+                    owner_id=owner_id,
+                    key=idempotency_key,
                     endpoint=endpoint,
                     status=response.status_code,
                     body_text=body_text,
                 )
+            conn.commit()
+            return response
     except psycopg.Error:
-        # Storage failure is non-fatal: the view already ran successfully.
-        # The next retry will re-execute the handler (cache miss again).
-        pass
+        # Cache subsystem failure: fall back to unprotected execution so the
+        # endpoint stays available. Matches the prior best-effort semantics.
+        return view_method(self_or_view, request, *args, **kwargs)
 
 
 def _rendered_body_text(response: Response) -> str:

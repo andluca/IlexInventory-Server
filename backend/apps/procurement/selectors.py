@@ -7,45 +7,13 @@ queries layer to build the response shapes needed by the API layer.
 
 from __future__ import annotations
 
-
-
 from apps.core.db import connect as _connect
-
-from apps.procurement.queries.purchase_order_lines import (
-    select_lines_for_purchase_order,
-)
+from apps.procurement._assemble import row_to_po_aggregated
 from apps.procurement.queries.purchase_orders import (
-    list_purchase_orders as _list_purchase_orders,
-    select_purchase_order_by_id,
+    list_purchase_orders_with_lines as _list_purchase_orders_with_lines,
+    select_purchase_order_with_lines,
 )
 from apps.procurement.types import PurchaseOrderRow
-
-
-def _row_to_po(header: dict, lines: list[dict]) -> PurchaseOrderRow:
-    """Assemble a PurchaseOrderRow from header dict + lines list."""
-    h = dict(header)
-    if "id" in h and not isinstance(h["id"], str):
-        h["id"] = str(h["id"])
-
-    converted_lines = []
-    for ln in lines:
-        ln = dict(ln)
-        for key in ("id", "purchase_order_id", "product_id"):
-            if key in ln and not isinstance(ln[key], str):
-                ln[key] = str(ln[key])
-        converted_lines.append(ln)
-
-    return {
-        "id": h["id"],
-        "owner_id": h["owner_id"],
-        "supplier_name": h["supplier_name"],
-        "supplier_contact": h.get("supplier_contact"),
-        "status": h["status"],
-        "received_at": h.get("received_at"),
-        "created_at": h["created_at"],
-        "updated_at": h["updated_at"],
-        "lines": converted_lines,
-    }
 
 
 def purchase_order_by_id(*, owner_id: int, po_id: str) -> PurchaseOrderRow | None:
@@ -55,17 +23,12 @@ def purchase_order_by_id(*, owner_id: int, po_id: str) -> PurchaseOrderRow | Non
     """
     with _connect() as conn:
         with conn.cursor() as cur:
-            header = select_purchase_order_by_id(
+            row = select_purchase_order_with_lines(
                 cur, params={"id": str(po_id), "owner_id": owner_id}
             )
-            if header is None:
+            if row is None:
                 return None
-            lines = select_lines_for_purchase_order(
-                cur,
-                params={"purchase_order_id": str(po_id), "owner_id": owner_id},
-            )
-
-    return _row_to_po(header, lines)
+    return row_to_po_aggregated(row)
 
 
 def list_purchase_orders(
@@ -90,7 +53,7 @@ def list_purchase_orders(
     """
     with _connect() as conn:
         with conn.cursor() as cur:
-            rows, total = _list_purchase_orders(
+            rows, total = _list_purchase_orders_with_lines(
                 cur,
                 params={
                     "owner_id": owner_id,
@@ -103,15 +66,7 @@ def list_purchase_orders(
                 },
             )
 
-            items = []
-            for row in rows:
-                po_id_str = str(row["id"])
-                lines = select_lines_for_purchase_order(
-                    cur,
-                    params={"purchase_order_id": po_id_str, "owner_id": owner_id},
-                )
-                items.append(_row_to_po(row, lines))
-
+    items = [row_to_po_aggregated(row) for row in rows]
     return {
         "items": items,
         "total": total,

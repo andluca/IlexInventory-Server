@@ -18,7 +18,7 @@ import psycopg.errors
 
 from apps.core.db import connect as _connect
 
-from apps.inventory.services import create_receipt_batches
+from apps.inventory.services import attach_receipt_batches
 from apps.procurement.errors import (
     ProductNotFound,
     PurchaseOrderAlreadyReceived,
@@ -362,15 +362,16 @@ def receive_purchase_order(
                     cur, params={"id": po_id_str, "owner_id": owner_id}
                 )
 
+                attach_receipt_batches(
+                    cur,
+                    owner_id=owner_id,
+                    lines=_build_receipt_lines(db_lines, line_metadata),
+                )
+
             conn.commit()
-        except (PurchaseOrderNotFound, PurchaseOrderAlreadyReceived, ReceiveLinesMismatch):
+        except Exception:
             conn.rollback()
             raise
-
-    create_receipt_batches(
-        owner_id=owner_id,
-        lines=_build_receipt_lines(db_lines, line_metadata),
-    )
 
     return _row_to_po(updated_header, db_lines)
 
